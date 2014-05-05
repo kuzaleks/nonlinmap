@@ -1,0 +1,1 @@
+Project for implementation of the nonlinear mapping using kernel trick at the CUDA environment in order to boost calculations.
