@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>
 
 #define TILE_WIDTH 16
 #define THREADS_IN_BLOCK 16
@@ -12,6 +13,18 @@
             return -1;                                                        \
         }                                                                     \
     } while(0)
+
+__device__ float kernal_func(float sigma, float* vArr, float* wArr, 
+							int trSampleInd, int testSampleInd, int dim) {
+	float cVal = 0.0;
+	float vEl, wEl;
+	for (int i = 0; i < dim; ++i) {
+		vEl = vArr[trSampleInd * dim + i];
+		wEl = wArr[testSampleInd * dim + i];
+		cVal += (vEl - wEl) * (vEl - wEl);
+	}
+	return exp(-0.5 * cVal / (sigma * sigma));
+}
 
 // Compute C = A * B
 __global__ void matrixMultiplyShared(float * A, float * B, float * C,
@@ -49,6 +62,20 @@ __global__ void matrixMultiplyShared(float * A, float * B, float * C,
 	if (rowInd < numCRows && colInd < numCColumns)
 		C[rowInd*numCColumns + colInd] = cVal;
 		
+}
+
+__global__ void make_tkern_matr(float* train, float* test, float* eigvecs, float* Kt
+								float sigma,
+								int trTotal, int testTotal, int dim) {
+								
+	int bx = blockIdx.x, by = blockIdx.y;
+	int tx = threadIdx.x, ty = threadIdx.y;
+	
+	int rowInd = by * blockDim.y + ty;
+	int colInd = bx * blockDim.x + tx;
+	
+	if (rowInd < testTotal && colInd < trTotal)
+		Kt[rowInd*trTotal + colInd] = kernal_func(sigma, train, test, colInd, rowInd, dim);
 }
 
 void fill_matr(float* M, int nrow, int ncol) {
