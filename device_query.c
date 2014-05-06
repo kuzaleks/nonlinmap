@@ -1,4 +1,4 @@
-#include	<wb.h>
+//#include	<wb.h>
 
 //@@ The purpose of this code is to become familiar with the submission 
 //@@ process. Do not worry if you do not understand all the details of 
