@@ -8,8 +8,8 @@
 #include <stdio.h>
 #include <math.h>
 
-#define TILE_WIDTH 32
-#define THREADS_IN_BLOCK 32
+#define TILE_WIDTH 16
+#define THREADS_IN_BLOCK 16
 
 #define wbCheck(stmt) do {                                                    \
         cudaError_t err = stmt;                                               \
@@ -20,15 +20,17 @@
         }                                                                     \
     } while(0)
 
-__device__ float kernal_func(double sigma, double* vArr, double* wArr, 
+
+__device__ double kernal_func(double sigma, double* vArr, double* wArr, 
 							int trSampleInd, int testSampleInd, int dim) {
-	float cVal = 0.0;
-	float vEl, wEl;
+	double cVal = 0.0;
+	double vEl, wEl;
 	for (int i = 0; i < dim; ++i) {
 		vEl = vArr[trSampleInd * dim + i];
 		wEl = wArr[testSampleInd * dim + i];
 		cVal += (vEl - wEl) * (vEl - wEl);
 	}
+
 	return exp(-0.5 * cVal / (sigma * sigma));
 }
 
@@ -42,8 +44,10 @@ __global__ void make_tkern_device(double* train, double* test, double* eigvecs, 
 	int rowInd = by * blockDim.y + ty;
 	int colInd = bx * blockDim.x + tx;
 	
-	if (rowInd < testTotal && colInd < trTotal)
+	if (rowInd < testTotal && colInd < trTotal) {
 		Kt[rowInd*trTotal + colInd] = kernal_func(sigma, train, test, colInd, rowInd, dim);
+		//dprintf("(%d %d): %.2f\n", rowInd, colInd, Kt[rowInd*trTotal + colInd]);
+	}
 }
 
 void fill_matr(double* M, int nrow, int ncol) {
@@ -59,6 +63,14 @@ void print_matr(double* M, int nrow, int ncol) {
 		printf("%s\n", "");
 	}
 	printf("%s\n", "");
+}
+
+void save_to_file(double* arr, int n, const char* fname) {
+	FILE* fp = fopen(fname, "w");
+	
+	fwrite((void *) arr, sizeof(double), n, fp);
+	
+	fclose(fp);
 }
 
 // Helper function for using CUDA to add vectors in parallel.
@@ -149,6 +161,9 @@ void make_tkern(double *train, double *test,
         exit(EXIT_FAILURE);
     }
 	print_matr(tKern, testTotal, trTotal);
+	save_to_file(tKern, testTotal * trTotal, "tkern.bin");
+	//int i = 0, j = 0;
+	//printf("tKern(%d, %d) = %.5f\n", i, j, tKern[i * dim + j]);
 	
 	printf("%s\n", "Freeing GPU Memory");
     //@@ Free the GPU memory here
@@ -160,6 +175,7 @@ void make_tkern(double *train, double *test,
 
 int main()
 {
+	double sigma = 4.0;
     const int dim = 13;
     int trTotal = 10;
     int testTotal = 7;
@@ -174,8 +190,10 @@ int main()
     test = (double *) malloc(testTotal * dim * sizeof(double));
 	fill_matr(train, trTotal, dim);
 	print_matr(train, trTotal, dim);
+	save_to_file(train, trTotal * dim, "train.bin");
 	fill_matr(test, testTotal, dim);
 	print_matr(test, testTotal, dim);
+	save_to_file(test, testTotal * dim, "test.bin");
 	
 	tKernRows = testTotal;
     tKernCols = trTotal;
@@ -185,6 +203,8 @@ int main()
 
     printf("%s %d %s %d\n", "The dimensions of train are ", trTotal, " x ", dim);
     printf("%s %d %s %d\n", "The dimensions of test are ", testTotal, " x ", dim);
+
+	make_tkern(train, test, trTotal, testTotal, dim, sigma, tKern);
     
     free(train);
     free(test);
