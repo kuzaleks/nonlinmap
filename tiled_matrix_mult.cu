@@ -8,7 +8,7 @@
 #define wbCheck(stmt) do {                                                    \
         cudaError_t err = stmt;                                               \
         if (err != cudaSuccess) {                                             \
-            printf("%s\n", "Failed to run stmt ");                       \
+            printf("%s\n", "Failed to run stmt ", #stmt);                       \
             printf("%s %s\n", "Got CUDA error ...  ", cudaGetErrorString(err));    \
             return -1;                                                        \
         }                                                                     \
@@ -186,12 +186,7 @@ int main(int argc, char ** argv) {
     //@@ Copy the GPU memory back to the CPU here
 	wbCheck(cudaMemcpy(hostC, deviceC, numCRows * numCColumns * sizeof(float), cudaMemcpyDeviceToHost));
 	print_matr(hostC, numCRows, numCColumns);
-	/*printf(
-		"(0, 0): %.2f (0, 1): %.2f\n(1, 0): %.2f, (1, 1): %.2f\n", 
-		hostC[0], hostC[1], 
-		hostC[numCColumns], hostC[numCColumns + 1]
-	);
-	*/
+	
     printf("%s\n", "Copying output memory to the CPU");
 	
     printf("%s\n", "Freeing GPU Memory");
