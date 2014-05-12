@@ -21,6 +21,24 @@
     } while(0)
 
 
+// Compute C = A * B
+__device__ void matrixMultiply(double * A, double * B, double * C,
+                   int numARows, int numAColumns,
+                   int numBRows, int numBColumns,
+                   int numCRows, int numCColumns) {
+    //@@ Insert code to implement matrix multiplication here
+	int row = blockIdx.y * blockDim.y + threadIdx.y;
+	int col = blockIdx.x * blockDim.x + threadIdx.x;
+	
+	if (row < numCRows && col < numCColumns) {
+		double cvalue = 0.0;
+		for (int k = 0; k < numAColumns; ++k)
+			cvalue += A[row * numAColumns + k] * B[k * numBColumns + col];
+		C[row * numCColumns + col] = cvalue;
+	}
+}
+ 
+
 __device__ void matrixMultiplyShared(double * A, double * B, double * C,
 			             int numARows, int numAColumns,
 			             int numBRows, int numBColumns,
@@ -91,10 +109,11 @@ __global__ void kern_transform(double* train, double* test,
 							   double* eigvecs, double* Kt, double* transTest, 
 							   double sigma, int trTotal, int testTotal, int dim, int transDim) {
 	make_tkern_device(train, test, Kt, sigma, trTotal, testTotal, dim);
-	matrixMultiplyShared(Kt, eigvecs, transTest,
+	matrixMultiply(Kt, eigvecs, transTest,
 			             testTotal, trTotal,
 			             trTotal, transDim,
 			             testTotal, transDim);
+			             
 }
 
 void fill_matr(double* M, int nrow, int ncol) {
@@ -122,19 +141,8 @@ void save_to_file(double* arr, int n, const char* fname) {
 
 void read_file(double* arr, int n, const char* fname) {
 	FILE* fp = fopen(fname, "rb");
-	double buf;
 	
 	fread((void *) arr, sizeof(double), n, fp);
-	
-	fclose(fp);
-	
-	fp = fopen(fname, "rb");
-	
-	for(int i = 0; i < 20; i++) {
-		fread((void *) &buf, sizeof(double), 1, fp);
-		printf("%.4f  ", buf);
-	}
-	printf("\n");
 	
 	fclose(fp);
 }
@@ -142,7 +150,7 @@ void read_file(double* arr, int n, const char* fname) {
 // Helper function for using CUDA to add vectors in parallel.
 void transform(double *train, double *test, double *eigvecs, double *transTest,
 				int trTotal, int testTotal, int dim, int transDim, double sigma,
-				double *tKern)
+				double *tKern, bool verbose)
 {
 	cudaError_t error;
 
@@ -235,18 +243,23 @@ void transform(double *train, double *test, double *eigvecs, double *transTest,
     error = cudaEventRecord(stop, NULL);
     
 	error = cudaEventSynchronize(stop);
+	
 	float msecTotal = 0.0f;
+	error = cudaEventElapsedTime(&msecTotal, start, stop);
 	printf("Performance: Time= %.3f msec\n", msecTotal);
+	
 	
 	printf("%s\n", "Copying output memory to the CPU");
     //@@ Copy the GPU memory back to the CPU here
 	error = cudaMemcpy(tKern, dtKern, testTotal * trTotal * sizeof(double), cudaMemcpyDeviceToHost);
 	if (error != cudaSuccess)
     {
-        printf("cudaMemcpy (test,dTest) returned error code %d, line(%d)\n", error, __LINE__);
+        printf("cudaMemcpy (dTest to test) returned error code %d, line(%d)\n", error, __LINE__);
         exit(EXIT_FAILURE);
     }
-	print_matr(tKern, testTotal, trTotal);
+    if (verbose)
+		print_matr(tKern, testTotal, trTotal);
+		
 	save_to_file(tKern, testTotal * trTotal, "tkern.bin");
 	//int i = 0, j = 0;
 	//printf("tKern(%d, %d) = %.5f\n", i, j, tKern[i * dim + j]);
@@ -257,7 +270,8 @@ void transform(double *train, double *test, double *eigvecs, double *transTest,
         printf("cudaMemcpy (dTransTest to transTest) returned error code %d, line(%d)\n", error, __LINE__);
         exit(EXIT_FAILURE);
     }
-	print_matr(transTest, testTotal, transDim);
+    if (verbose)
+		print_matr(transTest, testTotal, transDim);
 	save_to_file(transTest, testTotal * transDim, "trans_test.bin");
 
 	printf("%s\n", "Freeing GPU Memory");
@@ -275,8 +289,9 @@ int main()
 	double sigma = 4.0;
     const int dim = 13;
     const int transDim = dim;
-    int trTotal = 10;
-    int testTotal = 7;
+    bool verbose = false;
+    int trTotal = 2000;
+    int testTotal = 10000;
     int tKernRows;
     int tKernCols;
     double * train; 
@@ -290,15 +305,18 @@ int main()
     test = (double *) malloc(testTotal * dim * sizeof(double));
     
 	fill_matr(train, trTotal, dim);
-	print_matr(train, trTotal, dim);
+	if (verbose)
+		print_matr(train, trTotal, dim);
 	save_to_file(train, trTotal * dim, "train.bin");
 	fill_matr(test, testTotal, dim);
-	print_matr(test, testTotal, dim);
+	if (verbose)
+		print_matr(test, testTotal, dim);
 	save_to_file(test, testTotal * dim, "test.bin");
 	
 	eigvecs = (double *) malloc(trTotal * transDim * sizeof(double));
 	fill_matr(eigvecs, trTotal, transDim);
-	print_matr(eigvecs, trTotal, transDim);
+	if (verbose)
+		print_matr(eigvecs, trTotal, transDim);
 	save_to_file(eigvecs, trTotal * transDim, "eigvecs.bin");
 	
 	transTest = (double *) malloc(testTotal * transDim * sizeof(double));
@@ -314,18 +332,13 @@ int main()
     printf("%s %d %s %d\n", "The dimensions of test are ", testTotal, " x ", dim);
 
 	transform(train, test, eigvecs, transTest, 
-			  trTotal, testTotal, dim, transDim, sigma, tKern);
-    
-    double * transTestArch = (double *) malloc(testTotal * transDim * sizeof(double));
-    read_file(transTestArch, testTotal * transDim, "trans_test.bin");
-    print_matr(transTestArch, testTotal, transDim);
+			  trTotal, testTotal, dim, transDim, sigma, tKern, verbose);
     
     free(train);
     free(test);
     free(tKern);
     free(eigvecs);
     free(transTest);
-    free(transTestArch);
     
     return 0;
 }
