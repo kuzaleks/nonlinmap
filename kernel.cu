@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <math.h>
 
+
 #define TILE_WIDTH 16
 #define THREADS_IN_BLOCK 16
 
@@ -143,6 +144,82 @@ void read_file(double* arr, int n, const char* fname) {
 	FILE* fp = fopen(fname, "rb");
 	
 	fread((void *) arr, sizeof(double), n, fp);
+	
+	fclose(fp);
+}
+
+short big_to_little_endian(short inBig) {
+	unsigned short b0,b1;
+	short res;
+
+	b0 = (inBig & 0x00ff) << 8u;
+	b1 = (inBig & 0xff00) >> 8u;
+	
+	res = b0 | b1;
+	
+	return res;
+}
+
+int big_to_little_endian(int inBig) {
+	unsigned int b0,b1,b2,b3;
+	int res;
+
+	b0 = (inBig & 0x000000ff) << 24u;
+	b1 = (inBig & 0x0000ff00) << 8u;
+	b2 = (inBig & 0x00ff0000) >> 8u;
+	b3 = (inBig & 0xff000000) >> 24u;
+
+	res = b0 | b1 | b2 | b3;
+	return res;
+}
+
+float big_to_little_endian(float inBig) {
+	union {
+		int i;
+		float f;
+	} res;
+
+	res.f = inBig;
+	unsigned int b0,b1,b2,b3;
+
+	b0 = (res.i & 0x000000ff) << 24u;
+	b1 = (res.i & 0x0000ff00) << 8u;
+	b2 = (res.i & 0x00ff0000) >> 8u;
+	b3 = (res.i & 0xff000000) >> 24u;
+
+	res.i = b0 | b1 | b2 | b3;
+	return res.f;
+}
+
+void read_htk_header(int& nSamples, int& sampPeriod, short& sampSize, 
+					short& parmKind, char* fname) {
+	FILE* fp = fopen(fname, "rb");
+	
+	fread((void *)& nSamples, sizeof(int), 1, fp);
+	nSamples = big_to_little_endian(nSamples);
+	fread((void *)& sampPeriod, sizeof(int), 1, fp);
+	sampPeriod = big_to_little_endian(sampPeriod);
+	fread((void *)& sampSize, sizeof(short), 1, fp);
+	sampSize = big_to_little_endian(sampSize);
+	fread((void *)& parmKind, sizeof(short), 1, fp);
+	parmKind = big_to_little_endian(parmKind);
+	//fread((void *) params, sizeof(float), nSamples * sampSize / sizeof(float), fp);
+	
+	fclose(fp);
+}
+
+void read_htk_params(double* params, int testTotal, int dim, char* testfn) {
+	FILE* fp = fopen(testfn, "rb");
+	int buf;
+	for (int i = 0; i < 3; i++) // just to skip 12 bytes of the header
+		fread((void *) &buf, sizeof(int), 1, fp);
+	
+	for (int i = 0; i < testTotal * dim; i++) {
+		float fbuf;
+		fread((void *) &fbuf, sizeof(float), 1, fp);
+		params[i] = (double) big_to_little_endian(fbuf);
+		//printf("%d:, %.4f   %.4f   %.4f\n", i, fbuf, big_to_little_endian(fbuf), params[i]);
+	}
 	
 	fclose(fp);
 }
@@ -287,10 +364,10 @@ void transform(double *train, double *test, double *eigvecs, double *transTest,
 int main()
 {
 	double sigma = 4.0;
-    const int dim = 13;
-    const int transDim = dim;
+    int dim = 13;
+    int transDim = dim;
     bool verbose = false;
-    int trTotal = 2000;
+    int trTotal = 1917;
     int testTotal = 10000;
     int tKernRows;
     int tKernCols;
@@ -299,26 +376,39 @@ int main()
     double * tKern; 
     double * eigvecs;
     double * transTest;
+    int nSamples;
+    int sampPeriod;
+    short sampSize;
+    short parmKind;
     
     printf("%s\n", "Importing data and creating memory on host");
     train = (double *) malloc(trTotal * dim * sizeof(double));
-    test = (double *) malloc(testTotal * dim * sizeof(double));
     
 	fill_matr(train, trTotal, dim);
 	if (verbose)
 		print_matr(train, trTotal, dim);
 	save_to_file(train, trTotal * dim, "train.bin");
+	
+	char testfn[] = "Word_44.mfc";
+    read_htk_header(nSamples, sampPeriod, sampSize, parmKind, testfn);
+    printf("%d %d %d %d\n", nSamples, sampPeriod, sampSize, parmKind);
+    testTotal = nSamples;
+    dim = sampSize / sizeof(float);
+    test = (double *) malloc(testTotal * dim * sizeof(double));
+    read_htk_params(test, testTotal, dim, testfn);
+    print_matr(test, testTotal, dim);
+    
 	fill_matr(test, testTotal, dim);
-	if (verbose)
+	/*if (verbose)
 		print_matr(test, testTotal, dim);
 	save_to_file(test, testTotal * dim, "test.bin");
-	
+	*/
 	eigvecs = (double *) malloc(trTotal * transDim * sizeof(double));
-	fill_matr(eigvecs, trTotal, transDim);
+	read_file(eigvecs, trTotal * transDim, "eigvecs.bin");
+	// fill_matr(eigvecs, trTotal, transDim);
 	if (verbose)
 		print_matr(eigvecs, trTotal, transDim);
-	save_to_file(eigvecs, trTotal * transDim, "eigvecs.bin");
-	
+	// save_to_file(eigvecs, trTotal * transDim, "eigvecs.bin");
 	transTest = (double *) malloc(testTotal * transDim * sizeof(double));
 	
 	tKernRows = testTotal;
