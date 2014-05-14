@@ -382,11 +382,14 @@ int main()
     short parmKind;
     
     printf("%s\n", "Importing data and creating memory on host");
-    train = (double *) malloc(trTotal * dim * sizeof(double));
     
-	fill_matr(train, trTotal, dim);
+    train = (double *) malloc(trTotal * dim * sizeof(double));
+    read_file(train, trTotal * dim, "tr_data_subset.bin");
+    print_matr(train, trTotal, dim);
+	/*fill_matr(train, trTotal, dim);
 	if (verbose)
 		print_matr(train, trTotal, dim);
+	*/	
 	save_to_file(train, trTotal * dim, "train.bin");
 	
 	char testfn[] = "Word_44.mfc";
@@ -396,13 +399,13 @@ int main()
     dim = sampSize / sizeof(float);
     test = (double *) malloc(testTotal * dim * sizeof(double));
     read_htk_params(test, testTotal, dim, testfn);
-    print_matr(test, testTotal, dim);
     
-	fill_matr(test, testTotal, dim);
-	/*if (verbose)
+	/*fill_matr(test, testTotal, dim);
+	if (verbose)
 		print_matr(test, testTotal, dim);
+	*/	
 	save_to_file(test, testTotal * dim, "test.bin");
-	*/
+	
 	eigvecs = (double *) malloc(trTotal * transDim * sizeof(double));
 	read_file(eigvecs, trTotal * transDim, "eigvecs.bin");
 	// fill_matr(eigvecs, trTotal, transDim);

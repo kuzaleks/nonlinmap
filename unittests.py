@@ -87,7 +87,7 @@ def test_trans_data():
     f.write(str(transTestEstimed))
     f.close()
 
-    #assert np.allclose(transTest, transTestEstimed)
+    assert np.allclose(transTest, transTestEstimed)
 
 def main():
     args = sys.argv[1:]
