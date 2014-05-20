@@ -227,7 +227,7 @@ void read_htk_params(double* params, int testTotal, int dim, char* testfn) {
 // Helper function for using CUDA to add vectors in parallel.
 void transform(double *train, double *test, double *eigvecs, double *transTest,
 				int trTotal, int testTotal, int dim, int transDim, double sigma,
-				double *tKern, bool verbose)
+				double *tKern, bool verbose, bool saveToFile)
 {
 	cudaError_t error;
 
@@ -336,8 +336,8 @@ void transform(double *train, double *test, double *eigvecs, double *transTest,
     }
     if (verbose)
 		print_matr(tKern, testTotal, trTotal);
-		
-	save_to_file(tKern, testTotal * trTotal, "tkern.bin");
+	if (saveToFile)	
+		save_to_file(tKern, testTotal * trTotal, "tkern.bin");
 	//int i = 0, j = 0;
 	//printf("tKern(%d, %d) = %.5f\n", i, j, tKern[i * dim + j]);
 	
@@ -347,9 +347,10 @@ void transform(double *train, double *test, double *eigvecs, double *transTest,
         printf("cudaMemcpy (dTransTest to transTest) returned error code %d, line(%d)\n", error, __LINE__);
         exit(EXIT_FAILURE);
     }
-    if (verbose)
+    //if (verbose)
 		print_matr(transTest, testTotal, transDim);
-	save_to_file(transTest, testTotal * transDim, "trans_test.bin");
+	if (saveToFile)
+		save_to_file(transTest, testTotal * transDim, "trans_test.bin");
 
 	printf("%s\n", "Freeing GPU Memory");
     //@@ Free the GPU memory here
@@ -363,10 +364,13 @@ void transform(double *train, double *test, double *eigvecs, double *transTest,
 
 int main()
 {
-	double sigma = 4.0;
+	double sigma = 19.63;
     int dim = 13;
     int transDim = dim;
+    
     bool verbose = false;
+    bool saveToFile = true;
+    
     int trTotal = 1917;
     int testTotal = 10000;
     int tKernRows;
@@ -385,12 +389,12 @@ int main()
     
     train = (double *) malloc(trTotal * dim * sizeof(double));
     read_file(train, trTotal * dim, "tr_data_subset.bin");
-    print_matr(train, trTotal, dim);
-	/*fill_matr(train, trTotal, dim);
+    /*fill_matr(train, trTotal, dim);
 	if (verbose)
 		print_matr(train, trTotal, dim);
 	*/	
-	save_to_file(train, trTotal * dim, "train.bin");
+	if (saveToFile)
+		save_to_file(train, trTotal * dim, "train.bin");
 	
 	char testfn[] = "Word_44.mfc";
     read_htk_header(nSamples, sampPeriod, sampSize, parmKind, testfn);
@@ -403,8 +407,9 @@ int main()
 	/*fill_matr(test, testTotal, dim);
 	if (verbose)
 		print_matr(test, testTotal, dim);
-	*/	
-	save_to_file(test, testTotal * dim, "test.bin");
+	*/
+	if (saveToFile)	
+		save_to_file(test, testTotal * dim, "test.bin");
 	
 	eigvecs = (double *) malloc(trTotal * transDim * sizeof(double));
 	read_file(eigvecs, trTotal * transDim, "eigvecs.bin");
@@ -425,7 +430,7 @@ int main()
     printf("%s %d %s %d\n", "The dimensions of test are ", testTotal, " x ", dim);
 
 	transform(train, test, eigvecs, transTest, 
-			  trTotal, testTotal, dim, transDim, sigma, tKern, verbose);
+			  trTotal, testTotal, dim, transDim, sigma, tKern, verbose, saveToFile);
     
     free(train);
     free(test);

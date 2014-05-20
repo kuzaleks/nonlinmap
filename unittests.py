@@ -11,7 +11,7 @@ def dot(v, w): return sum([elv * elw for (elv, elw) in zip(v, w)])
 
 def read_config(fn=""):
     config = {}
-    config["sigma"] = 4.0;
+    config["sigma"] = 19.63;
     config["dim"] = 13;
     config["transDim"] = 13;
     config["dt"] = np.dtype('<d')
@@ -99,7 +99,7 @@ def main():
     
     if args[0] == '--test':
         test_tkernel()
-#        test_trans_data()
+        test_trans_data()
 
 
 if __name__ == '__main__':
