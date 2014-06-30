@@ -2,6 +2,7 @@
 
 import sys, os
 import numpy as np
+import mlpy
 
 def vsum(v, w): return [elv + elw for (elv, elw) in zip(v, w)]
 
@@ -72,6 +73,7 @@ def test_tkernel():
 
     assert np.allclose(tKernEstimed, tkern)
 
+
 def test_trans_data():
     workdir = os.path.join("tkernel", "tkernel")
     config = read_config()
@@ -107,13 +109,40 @@ def test_trans_data():
 
     trTotalExt = 3834
     Kx = freader(Kxfn, trTotalExt)
-#    tKernEstimed = centered_kernel_matrix(tKernEstimed, Kx)
+    tKernEstimed = mlpy.kernel_center(tKernEstimed, Kx.T)
     transTestEstimed = np.dot(tKernEstimed, eigvecs)
     f = open("trans_test_estimed", "w")
     f.write(str(transTestEstimed))
     f.close()
 
-    assert np.allclose(transTest, transTestEstimed)
+    assert np.allclose(transTest, transTestEstimed, atol=1e-5)
+
+def test_centering():
+    workdir = os.path.join("tkernel", "tkernel")
+    config = read_config()
+
+    freader = file_reader(config["dt"], workdir)
+
+    testfn = "test.bin"
+    tkernfn = "tkern.bin"
+    Kxfn = "Kx.bin"
+    
+    train = freader(trainfn, config["dim"])
+    nTrain = train.shape[0]
+
+    test = freader(testfn, config["dim"])
+    nTest = test.shape[0]
+
+    sigma = config["sigma"]
+    tKernEstimed = np.array([[np.exp(-0.5 * np.dot(trEl-testEl, trEl-testEl)/sigma**2) for trEl in train] for testEl in test])
+
+    Kx = freader(Kxfn, trTotalExt)
+    tKernEstimedCent = mlpy.kernel_center(tKernEstimed, Kx.T)
+
+    gpuTKernCent = freader("t_kern_centr.bin", nTrain)
+
+    assert np.allclose(tKernEstimedCent, gpuTKernCent, atol=1e-5)
+
 
 def main():
     args = sys.argv[1:]
@@ -121,11 +150,12 @@ def main():
     promptMessage = "--test" 
     if not args:
         print promptMessage
-        return
+    #    return
     
-    if args[0] == '--test':
-        #test_tkernel()
+    if True: #args[0] == '--test':
+        test_tkernel()
         test_trans_data()
+        test_centering()
 
 
 if __name__ == '__main__':

@@ -284,11 +284,6 @@ void transform(double *train, double *test, double* Kx, double *eigvecs, double 
         exit(EXIT_FAILURE);
     }
     
-    int rowInd = 1; 
-    printf("%d\n", trTotalExt);
-	for (int j = 0; j < 10; j++)
-		printf("  %3.8f", Kx[rowInd * trTotalExt + j]);
-	printf("\n");
     sumsumKx = 0.0;
     for (int i = 0; i < trTotal; i++)
 		for (int j = 0; j < trTotalExt; j++)
@@ -392,8 +387,8 @@ void transform(double *train, double *test, double* Kx, double *eigvecs, double 
         printf("cudaMemcpy (dTest to test) returned error code %d, line(%d)\n", error, __LINE__);
         exit(EXIT_FAILURE);
     }
-    //if (verbose)
-	//	print_matr(tKern, testTotal, trTotal);
+    if (verbose)
+		print_matr(tKern, testTotal, trTotal);
 	if (saveToFile)	
 		save_to_file(tKern, testTotal * trTotal, "tkern.bin");
 	
@@ -421,14 +416,6 @@ void transform(double *train, double *test, double* Kx, double *eigvecs, double 
 		save_to_file(tKernCentr, testTotal * trTotal, "t_kern_centr.bin");
 	free(tKernCentr);
 	
-	int i = 0; 
-	for (int j = 0; j < transDim; j++)
-		printf("  %2.8f", transTest[i * transDim + j]);
-	printf("\n");
-	i = 1; 
-	for (int j = 0; j < transDim; j++)
-		printf("  %2.8f", transTest[i * transDim + j]);
-	printf("\n");
 	printf("%s\n", "Freeing GPU Memory");
     //@@ Free the GPU memory here
 	cudaFree(dTrain);
