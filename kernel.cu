@@ -107,7 +107,8 @@ __device__ void make_tkern_device(double* train, double* test, double* Kt,
 	}
 }
 
-__device__ void center(double* Kt, double* K, double* KtCent, int trTotal, int testTotal, double sumsumK) {
+__device__ void center(double* Kt, double* K, double* KtCent, int trTotal, 
+						int trTotalExt, int testTotal, double sumsumK) {
 	int bx = blockIdx.x, by = blockIdx.y;
 	int tx = threadIdx.x, ty = threadIdx.y;
 	
@@ -119,24 +120,26 @@ __device__ void center(double* Kt, double* K, double* KtCent, int trTotal, int t
 		for (int j = 0; j < trTotal; j++)
 			KtOne += Kt[rowInd * trTotal + j];
 		double oneK = 0.0;
-		for (int i = 0; i < trTotal; i++)
-			oneK += K[i * trTotal + colInd];
+		for (int i = 0; i < trTotalExt; i++)
+			oneK += K[colInd * trTotalExt + i]; 
 		KtCent[rowInd * trTotal + colInd] = Kt[rowInd * trTotal + colInd] - (1.0 / trTotal) * KtOne - \
-											(1.0 / trTotal) * oneK + (1.0 / (trTotal * trTotal)) * sumsumK;
+											(1.0 / trTotalExt) * oneK + (1.0 / (trTotal * trTotalExt)) * sumsumK;
 	}
 }
 
 __global__ void kern_transform(double* train, double* test, double* Kx,
-							   double* eigvecs, double* Kt, double* transTest, 
+							   double* eigvecs, double* Kt, double * KtCent, double* transTest, 
 							   double sigma, int trTotal, int trTotalExt, 
-							   int testTotal, int dim, int transDim) {
+							   int testTotal, int dim, int transDim, double sumsumK) {
 	make_tkern_device(train, test, Kt, sigma, trTotal, testTotal, dim);
 	__syncthreads();
-	matrixMultiply(Kt, eigvecs, transTest,
+	center(Kt, Kx, KtCent, trTotal, trTotalExt, testTotal, sumsumK);
+	__syncthreads();
+	matrixMultiply(KtCent, eigvecs, transTest,
 			             testTotal, trTotal,
 			             trTotal, transDim,
 			             testTotal, transDim);
-			             
+	__syncthreads();		             
 }
 
 void fill_matr(double* M, int nrow, int ncol) {
@@ -257,8 +260,11 @@ void transform(double *train, double *test, double* Kx, double *eigvecs, double 
     double * dTest;
     double * dKx;
     double * dtKern;
+    double * tKernCentr;
+    double * dtKernCentr;
     double * deigvecs;
     double * dTransTest;
+    double sumsumKx;
     
     
     printf("%s\n", "Allocating GPU memory.");
@@ -277,6 +283,17 @@ void transform(double *train, double *test, double* Kx, double *eigvecs, double 
         printf("cudaMalloc dTest returned error code %d, line(%d)\n", error, __LINE__);
         exit(EXIT_FAILURE);
     }
+    
+    int rowInd = 1; 
+    printf("%d\n", trTotalExt);
+	for (int j = 0; j < 10; j++)
+		printf("  %3.8f", Kx[rowInd * trTotalExt + j]);
+	printf("\n");
+    sumsumKx = 0.0;
+    for (int i = 0; i < trTotal; i++)
+		for (int j = 0; j < trTotalExt; j++)
+			sumsumKx += Kx[i*trTotalExt + j];
+	printf("%3.8f\n", sumsumKx);
     error = cudaMalloc((void**) &dKx, trTotal * trTotalExt * sizeof(double));
 	if (error != cudaSuccess)
     {
@@ -287,6 +304,12 @@ void transform(double *train, double *test, double* Kx, double *eigvecs, double 
 	if (error != cudaSuccess)
     {
         printf("cudaMalloc dtKern returned error code %d, line(%d)\n", error, __LINE__);
+        exit(EXIT_FAILURE);
+    }
+    error = cudaMalloc((void**) &dtKernCentr, testTotal * trTotal * sizeof(double));
+	if (error != cudaSuccess)
+    {
+        printf("cudaMalloc dtKernCentr returned error code %d, line(%d)\n", error, __LINE__);
         exit(EXIT_FAILURE);
     }
     error = cudaMalloc((void**) &deigvecs, trTotal * transDim * sizeof(double));
@@ -346,8 +369,8 @@ void transform(double *train, double *test, double* Kx, double *eigvecs, double 
 	// Record the start event
     error = cudaEventRecord(start, NULL);
     
-    kern_transform<<<DimGrid, DimBlock>>>(dTrain, dTest, dKx, deigvecs, dtKern, dTransTest,
-											sigma, trTotal, trTotalExt, testTotal, dim, transDim);
+    kern_transform<<<DimGrid, DimBlock>>>(dTrain, dTest, dKx, deigvecs, dtKern, dtKernCentr, dTransTest,
+										  sigma, trTotal, trTotalExt, testTotal, dim, transDim, sumsumKx);
 											
 	cudaThreadSynchronize();
 	
@@ -369,12 +392,10 @@ void transform(double *train, double *test, double* Kx, double *eigvecs, double 
         printf("cudaMemcpy (dTest to test) returned error code %d, line(%d)\n", error, __LINE__);
         exit(EXIT_FAILURE);
     }
-    if (verbose)
-		print_matr(tKern, testTotal, trTotal);
+    //if (verbose)
+	//	print_matr(tKern, testTotal, trTotal);
 	if (saveToFile)	
 		save_to_file(tKern, testTotal * trTotal, "tkern.bin");
-	//int i = 0, j = 0;
-	//printf("tKern(%d, %d) = %.5f\n", i, j, tKern[i * dim + j]);
 	
 	error = cudaMemcpy(transTest, dTransTest, testTotal * transDim * sizeof(double), cudaMemcpyDeviceToHost);
 	if (error != cudaSuccess)
@@ -386,13 +407,35 @@ void transform(double *train, double *test, double* Kx, double *eigvecs, double 
 		print_matr(transTest, testTotal, transDim);
 	if (saveToFile)
 		save_to_file(transTest, testTotal * transDim, "trans_test.bin");
-
+		
+	tKernCentr = (double *) malloc(testTotal * trTotal * sizeof(double));
+	error = cudaMemcpy(tKernCentr, dtKernCentr, testTotal * trTotal * sizeof(double), cudaMemcpyDeviceToHost);
+	if (error != cudaSuccess)
+    {
+        printf("cudaMemcpy (dtKernCentr to tKernCentr) returned error code %d, line(%d)\n", error, __LINE__);
+        exit(EXIT_FAILURE);
+    }
+    if (verbose)
+		print_matr(tKernCentr, testTotal, trTotal);
+	if (saveToFile)
+		save_to_file(tKernCentr, testTotal * trTotal, "t_kern_centr.bin");
+	free(tKernCentr);
+	
+	int i = 0; 
+	for (int j = 0; j < transDim; j++)
+		printf("  %2.8f", transTest[i * transDim + j]);
+	printf("\n");
+	i = 1; 
+	for (int j = 0; j < transDim; j++)
+		printf("  %2.8f", transTest[i * transDim + j]);
+	printf("\n");
 	printf("%s\n", "Freeing GPU Memory");
     //@@ Free the GPU memory here
 	cudaFree(dTrain);
 	cudaFree(dTest);
 	cudaFree(dKx);
 	cudaFree(dtKern);
+	cudaFree(dtKernCentr);
 	cudaFree(deigvecs);
 	cudaFree(transTest);
 }
@@ -471,7 +514,7 @@ int main()
     printf("%s %d %s %d\n", "The dimensions of test are ", testTotal, " x ", dim);
 
 	transform(train, test, Kx, eigvecs, transTest, 
-			  trTotal, trTotal, testTotal, dim, transDim, 
+			  trTotal, trTotalExt, testTotal, dim, transDim, 
 			  sigma, tKern, verbose, saveToFile);
     
     free(train);

@@ -9,6 +9,26 @@ def scal(alpha, v): return [alpha * el for el in v]
 
 def dot(v, w): return sum([elv * elw for (elv, elw) in zip(v, w)])
 
+def centered_kernel_matrix(Kt, KSub):
+    """
+    Center samples in the Reproduced Hilbert Space in Kt() on training kernel
+    matrix KSub
+    Kt = np.random.rand(testTot, trTot)
+    KSub = np.random.rand(trTot, trTot)
+    """
+    assert Kt.shape[1] == KSub.shape[0]
+    # Kt.shape = (10, 2), KSub.shape = (2, 4)
+    trTotSub = KSub.shape[0]
+    trTot = KSub.shape[1]
+    KtMan = np.zeros(Kt.shape)
+    for i in range(KtMan.shape[0]):
+        for j in range(KtMan.shape[1]):
+            KtOne = sum(Kt[i, :])
+            oneK = sum(KSub[j, :])
+            sumsumK = sum(sum(KSub))
+            KtMan[i, j] = Kt[i, j] - (1.0/trTotSub) * KtOne - (1.0/trTot) * oneK + (1.0 / (trTotSub * trTot)) * sumsumK
+    return KtMan
+
 def read_config(fn=""):
     config = {}
     config["sigma"] = 19.63;
@@ -67,6 +87,7 @@ def test_trans_data():
     tkernfn = "tkern.bin"
     eigvecsfn = "eigvecs.bin"
     transfn = "trans_test.bin"
+    Kxfn = "Kx.bin"
     
     train = freader(trainfn, dim)
     nTrain = train.shape[0]
@@ -74,14 +95,19 @@ def test_trans_data():
     test = freader(testfn, dim)
     nTest = test.shape[0]
 
-    tKernEstimed = [[np.exp(-0.5 * np.dot(trEl-testEl, trEl-testEl)/sigma**2) for trEl in train] for testEl in test]
+    tKernEstimed = np.array([[np.exp(-0.5 * np.dot(trEl-testEl, trEl-testEl)/sigma**2) for trEl in train] for testEl in test])
+    
     
     eigvecs = freader(eigvecsfn, transDim)
     transTest = freader(transfn, transDim)
+    
     f = open("trans_test", "w")
     f.write(str(transTest))
     f.close()
-    
+
+    trTotalExt = 3834
+    Kx = freader(Kxfn, trTotalExt)
+#    tKernEstimed = centered_kernel_matrix(tKernEstimed, Kx)
     transTestEstimed = np.dot(tKernEstimed, eigvecs)
     f = open("trans_test_estimed", "w")
     f.write(str(transTestEstimed))
@@ -98,7 +124,7 @@ def main():
         return
     
     if args[0] == '--test':
-        test_tkernel()
+        #test_tkernel()
         test_trans_data()
 
 
