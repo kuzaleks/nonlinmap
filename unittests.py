@@ -124,6 +124,7 @@ def test_centering():
     freader = file_reader(config["dt"], workdir)
 
     testfn = "test.bin"
+    trainfn = "train.bin"
     tkernfn = "tkern.bin"
     Kxfn = "Kx.bin"
     
@@ -136,6 +137,7 @@ def test_centering():
     sigma = config["sigma"]
     tKernEstimed = np.array([[np.exp(-0.5 * np.dot(trEl-testEl, trEl-testEl)/sigma**2) for trEl in train] for testEl in test])
 
+    trTotalExt = 3834
     Kx = freader(Kxfn, trTotalExt)
     tKernEstimedCent = mlpy.kernel_center(tKernEstimed, Kx.T)
 

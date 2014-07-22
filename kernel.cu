@@ -107,6 +107,28 @@ __device__ void make_tkern_device(double* train, double* test, double* Kt,
 	}
 }
 
+__device__ void estim_row_sums(double* Kt, double* K, double* KtRowsSums, double* KRowsSums,
+								int trTotal, int trTotalExt, int testTotal) {
+	int bx = blockIdx.x, by = blockIdx.y;
+	int tx = threadIdx.x, ty = threadIdx.y;
+	
+	int rowInd = by * blockDim.y + ty;
+	int colInd = bx * blockDim.x + tx;
+	
+	if (rowInd < testTotal && colInd == 0) {
+		double KtOne = 0.0;
+		for (int j = 0; j < trTotal; j++)
+			KtOne += Kt[rowInd * trTotal + j];
+		KtRowsSums[rowInd] = KtOne;
+		}
+	if (rowInd < trTotal && colInd == 0) {
+		double oneK = 0.0;
+		for (int i = 0; i < trTotalExt; i++)
+			oneK += K[rowInd * trTotalExt + i];
+		KRowsSums[rowInd] = oneK;
+	}
+}
+
 __device__ void center(double* Kt, double* K, double* KtCent, int trTotal, 
 						int trTotalExt, int testTotal, double sumsumK) {
 	int bx = blockIdx.x, by = blockIdx.y;
@@ -129,10 +151,12 @@ __device__ void center(double* Kt, double* K, double* KtCent, int trTotal,
 
 __global__ void kern_transform(double* train, double* test, double* Kx,
 							   double* eigvecs, double* Kt, double * KtCent, double* transTest, 
+							   double* KtRowsSums, double* KRowsSums,
 							   double sigma, int trTotal, int trTotalExt, 
 							   int testTotal, int dim, int transDim, double sumsumK) {
 	make_tkern_device(train, test, Kt, sigma, trTotal, testTotal, dim);
 	__syncthreads();
+	estim_row_sums(Kt, Kx, KtRowsSums, KRowsSums, trTotal, trTotalExt, testTotal);
 	center(Kt, Kx, KtCent, trTotal, trTotalExt, testTotal, sumsumK);
 	__syncthreads();
 	matrixMultiply(KtCent, eigvecs, transTest,
@@ -264,6 +288,8 @@ void transform(double *train, double *test, double* Kx, double *eigvecs, double 
     double * dtKernCentr;
     double * deigvecs;
     double * dTransTest;
+    double * dKtRowsSums;
+    double * dKRowsSums;
     double sumsumKx;
     
     
@@ -288,7 +314,7 @@ void transform(double *train, double *test, double* Kx, double *eigvecs, double 
     for (int i = 0; i < trTotal; i++)
 		for (int j = 0; j < trTotalExt; j++)
 			sumsumKx += Kx[i*trTotalExt + j];
-	printf("%3.8f\n", sumsumKx);
+	//printf("%3.8f\n", sumsumKx);
     error = cudaMalloc((void**) &dKx, trTotal * trTotalExt * sizeof(double));
 	if (error != cudaSuccess)
     {
@@ -346,6 +372,18 @@ void transform(double *train, double *test, double* Kx, double *eigvecs, double 
         printf("cudaMemcpy (eigvecs, deigvecs) returned error code %d, line(%d)\n", error, __LINE__);
         exit(EXIT_FAILURE);
     }
+    error = cudaMalloc((void**) &dKtRowsSums, trTotal * sizeof(double));
+    if (error != cudaSuccess)
+    {
+        printf("cudaMalloc dKtRowsSums returned error code %d, line(%d)\n", error, __LINE__);
+        exit(EXIT_FAILURE);
+    }
+    error = cudaMalloc((void**) &dKRowsSums, trTotal * sizeof(double));
+    if (error != cudaSuccess)
+    {
+        printf("cudaMalloc dKRowsSums returned error code %d, line(%d)\n", error, __LINE__);
+        exit(EXIT_FAILURE);
+    }
     
     //@@ Initialize the grid and block dimensions here
     dim3 DimGrid((trTotal - 1)/THREADS_IN_BLOCK + 1, (testTotal - 1)/THREADS_IN_BLOCK + 1, 1);
@@ -365,6 +403,7 @@ void transform(double *train, double *test, double* Kx, double *eigvecs, double 
     error = cudaEventRecord(start, NULL);
     
     kern_transform<<<DimGrid, DimBlock>>>(dTrain, dTest, dKx, deigvecs, dtKern, dtKernCentr, dTransTest,
+										  dKtRowsSums, dKRowsSums,
 										  sigma, trTotal, trTotalExt, testTotal, dim, transDim, sumsumKx);
 											
 	cudaThreadSynchronize();
@@ -425,6 +464,8 @@ void transform(double *train, double *test, double* Kx, double *eigvecs, double 
 	cudaFree(dtKernCentr);
 	cudaFree(deigvecs);
 	cudaFree(transTest);
+	cudaFree(dKtRowsSums);
+	cudaFree(dKRowsSums);
 }
 
 
