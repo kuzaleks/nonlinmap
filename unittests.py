@@ -1,6 +1,6 @@
 # !c:\Anaconda\python
 
-import sys, os
+import sys, os, json, pickle
 import numpy as np
 import mlpy
 
@@ -46,7 +46,7 @@ def file_reader(dt, workdir):
         return np.reshape(train, (len(train) / ncol, ncol))
     return read_bin
 
-def test_tkernel():
+def tkernel():
         
     workdir = os.path.join("tkernel", "tkernel")
     config = read_config()
@@ -106,6 +106,9 @@ def test_trans_data():
     f = open("trans_test", "w")
     f.write(str(transTest))
     f.close()
+    f = open("trans_test.pkl", 'w')
+    pickle.dump(transTest, f)
+    f.close()
 
     trTotalExt = 3834
     Kx = freader(Kxfn, trTotalExt)
@@ -114,10 +117,13 @@ def test_trans_data():
     f = open("trans_test_estimed", "w")
     f.write(str(transTestEstimed))
     f.close()
+    f = open("trans_test_estimed.pkl", 'w')
+    pickle.dump(transTestEstimed, f)
+    f.close()
 
     assert np.allclose(transTest, transTestEstimed, atol=1e-5)
 
-def test_centering():
+def centering():
     workdir = os.path.join("tkernel", "tkernel")
     config = read_config()
 

@@ -120,17 +120,17 @@ __device__ void estim_row_sums(double* Kt, double* K, double* KtRowsSums, double
 		for (int j = 0; j < trTotal; j++)
 			KtOne += Kt[rowInd * trTotal + j];
 		KtRowsSums[rowInd] = KtOne;
-		}
-	if (rowInd < trTotal && colInd == 0) {
+	}
+	if (rowInd == 0 && colInd < trTotal) {
 		double oneK = 0.0;
 		for (int i = 0; i < trTotalExt; i++)
-			oneK += K[rowInd * trTotalExt + i];
-		KRowsSums[rowInd] = oneK;
+			oneK += K[colInd * trTotalExt + i];
+		KRowsSums[colInd] = oneK;
 	}
 }
 
-__device__ void center(double* Kt, double* K, double* KtCent, int trTotal, 
-						int trTotalExt, int testTotal, double sumsumK) {
+__device__ void center(double* Kt, double* K, double* KtCent, double* KtRowsSums, double* KRowsSums, 
+						int trTotal, int trTotalExt, int testTotal, double sumsumK) {
 	int bx = blockIdx.x, by = blockIdx.y;
 	int tx = threadIdx.x, ty = threadIdx.y;
 	
@@ -139,11 +139,13 @@ __device__ void center(double* Kt, double* K, double* KtCent, int trTotal,
 	
 	if (rowInd < testTotal && colInd < trTotal) {
 		double KtOne = 0.0;
-		for (int j = 0; j < trTotal; j++)
-			KtOne += Kt[rowInd * trTotal + j];
+		//for (int j = 0; j < trTotal; j++)
+		//	KtOne += Kt[rowInd * trTotal + j];
 		double oneK = 0.0;
-		for (int i = 0; i < trTotalExt; i++)
-			oneK += K[colInd * trTotalExt + i]; 
+		//for (int i = 0; i < trTotalExt; i++)
+		//	oneK += K[colInd * trTotalExt + i]; 
+		KtOne = KtRowsSums[rowInd];
+		oneK = KRowsSums[colInd];
 		KtCent[rowInd * trTotal + colInd] = Kt[rowInd * trTotal + colInd] - (1.0 / trTotal) * KtOne - \
 											(1.0 / trTotalExt) * oneK + (1.0 / (trTotal * trTotalExt)) * sumsumK;
 	}
@@ -157,7 +159,8 @@ __global__ void kern_transform(double* train, double* test, double* Kx,
 	make_tkern_device(train, test, Kt, sigma, trTotal, testTotal, dim);
 	__syncthreads();
 	estim_row_sums(Kt, Kx, KtRowsSums, KRowsSums, trTotal, trTotalExt, testTotal);
-	center(Kt, Kx, KtCent, trTotal, trTotalExt, testTotal, sumsumK);
+	__syncthreads();
+	center(Kt, Kx, KtCent, KtRowsSums, KRowsSums, trTotal, trTotalExt, testTotal, sumsumK);
 	__syncthreads();
 	matrixMultiply(KtCent, eigvecs, transTest,
 			             testTotal, trTotal,
