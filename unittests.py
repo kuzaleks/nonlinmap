@@ -74,6 +74,25 @@ def test_tkernel():
     assert np.allclose(tKernEstimed, tkern)
 
 
+class NLTransformer(object):
+    def __init__(self, trainfn, Kxfn, trTotalExt, eigvecsfn, workdir, config):
+        dim = config["dim"]
+        transDim = config["transDim"]
+        dt = config["dt"]
+        self.sigma = config["sigma"]
+        freader = file_reader(dt, workdir)
+        self.Kx = freader(Kxfn, trTotalExt)
+        self.eigvecs = freader(eigvecsfn, transDim)
+        self.train = freader(trainfn, dim)
+        self.nTrain = self.train.shape[0]
+        
+    def transform(self, data):
+        tKernEstimed = np.array([[np.exp(-0.5 * np.dot(trEl-el, trEl-el)/self.sigma**2) for trEl in self.train] for el in data])
+        tKernEstimed = mlpy.kernel_center(tKernEstimed, self.Kx.T)
+        return np.dot(tKernEstimed, self.eigvecs)
+    
+        
+
 def test_trans_data():
     workdir = os.path.join("tkernel", "tkernel")
     config = read_config()
@@ -90,18 +109,9 @@ def test_trans_data():
     eigvecsfn = "eigvecs.bin"
     transfn = "trans_test.bin"
     Kxfn = "Kx.bin"
-    
-    train = freader(trainfn, dim)
-    nTrain = train.shape[0]
 
-    test = freader(testfn, dim)
-    nTest = test.shape[0]
-
-    tKernEstimed = np.array([[np.exp(-0.5 * np.dot(trEl-testEl, trEl-testEl)/sigma**2) for trEl in train] for testEl in test])
-    
-    
-    eigvecs = freader(eigvecsfn, transDim)
     transTest = freader(transfn, transDim)
+    nTrTest = transTest.shape[0]
     
     f = open("trans_test", "w")
     f.write(str(transTest))
@@ -110,10 +120,13 @@ def test_trans_data():
     pickle.dump(transTest, f)
     f.close()
 
+    test = freader(testfn, dim)
+    nTest = test.shape[0]
     trTotalExt = 3834
-    Kx = freader(Kxfn, trTotalExt)
-    tKernEstimed = mlpy.kernel_center(tKernEstimed, Kx.T)
-    transTestEstimed = np.dot(tKernEstimed, eigvecs)
+    tformer = NLTransformer(trainfn, Kxfn, trTotalExt, eigvecsfn, \
+                                workdir, config)
+    transTestEstimed = tformer.transform(test)
+
     f = open("trans_test_estimed", "w")
     f.write(str(transTestEstimed))
     f.close()
