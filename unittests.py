@@ -46,7 +46,7 @@ def file_reader(dt, workdir):
         return np.reshape(train, (len(train) / ncol, ncol))
     return read_bin
 
-def tkernel():
+def test_tkernel():
         
     workdir = os.path.join("tkernel", "tkernel")
     config = read_config()
@@ -123,7 +123,7 @@ def test_trans_data():
 
     assert np.allclose(transTest, transTestEstimed, atol=1e-5)
 
-def centering():
+def test_centering():
     workdir = os.path.join("tkernel", "tkernel")
     config = read_config()
 

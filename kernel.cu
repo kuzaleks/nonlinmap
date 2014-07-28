@@ -2,7 +2,8 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 
-#include <stdio.h>
+#include "utils.h"
+#include "htk_utils.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -169,81 +170,9 @@ __global__ void kern_transform(double* train, double* test, double* Kx,
 	__syncthreads();		             
 }
 
-void fill_matr(double* M, int nrow, int ncol) {
-	for (int i = 0; i < nrow; i++)
-		for (int j = 0; j < ncol; j++)
-			M[i * ncol + j] = rand() % 3;
-}
 
-void print_matr(double* M, int nrow, int ncol) {
-	for (int i = 0; i < nrow; i++) {
-		for (int j = 0; j < ncol; j++)
-			printf("%5.3f ", M[i * ncol + j]);
-		printf("%s\n", "");
-	}
-	printf("%s\n", "");
-}
 
-void save_to_file(double* arr, int n, const char* fname) {
-	FILE* fp = fopen(fname, "wb");
-	
-	fwrite((void *) arr, sizeof(double), n, fp);
-	
-	fclose(fp);
-}
-
-void read_file(double* arr, int n, const char* fname) {
-	FILE* fp = fopen(fname, "rb");
-	
-	fread((void *) arr, sizeof(double), n, fp);
-	
-	fclose(fp);
-}
-
-short big_to_little_endian(short inBig) {
-	unsigned short b0,b1;
-	short res;
-
-	b0 = (inBig & 0x00ff) << 8u;
-	b1 = (inBig & 0xff00) >> 8u;
-	
-	res = b0 | b1;
-	
-	return res;
-}
-
-int big_to_little_endian(int inBig) {
-	unsigned int b0,b1,b2,b3;
-	int res;
-
-	b0 = (inBig & 0x000000ff) << 24u;
-	b1 = (inBig & 0x0000ff00) << 8u;
-	b2 = (inBig & 0x00ff0000) >> 8u;
-	b3 = (inBig & 0xff000000) >> 24u;
-
-	res = b0 | b1 | b2 | b3;
-	return res;
-}
-
-float big_to_little_endian(float inBig) {
-	union {
-		int i;
-		float f;
-	} res;
-
-	res.f = inBig;
-	unsigned int b0,b1,b2,b3;
-
-	b0 = (res.i & 0x000000ff) << 24u;
-	b1 = (res.i & 0x0000ff00) << 8u;
-	b2 = (res.i & 0x00ff0000) >> 8u;
-	b3 = (res.i & 0xff000000) >> 24u;
-
-	res.i = b0 | b1 | b2 | b3;
-	return res.f;
-}
-
-void read_htk_header(int& nSamples, int& sampPeriod, short& sampSize, 
+/*void read_htk_header(int& nSamples, int& sampPeriod, short& sampSize, 
 					short& parmKind, char* fname) {
 	FILE* fp = fopen(fname, "rb");
 	
@@ -274,7 +203,7 @@ void read_htk_params(double* params, int testTotal, int dim, char* testfn) {
 	}
 	
 	fclose(fp);
-}
+}*/
 
 // Helper function for using CUDA to add vectors in parallel.
 void transform(double *train, double *test, double* Kx, double *eigvecs, double *transTest,
