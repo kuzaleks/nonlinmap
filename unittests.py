@@ -48,7 +48,7 @@ def file_reader(dt, workdir):
 
 def test_tkernel():
         
-    workdir = os.path.join("tkernel", "tkernel")
+    workdir = os.path.join("tkernel_new", "tkernel_new")
     config = read_config()
     dim = config["dim"]
     dt = config["dt"]
@@ -94,7 +94,7 @@ class NLTransformer(object):
         
 
 def test_trans_data():
-    workdir = os.path.join("tkernel", "tkernel")
+    workdir = os.path.join("tkernel_new", "tkernel_new")
     config = read_config()
     dim = config["dim"]
     transDim = config["transDim"]
@@ -137,7 +137,7 @@ def test_trans_data():
     assert np.allclose(transTest, transTestEstimed, atol=1e-5)
 
 def test_centering():
-    workdir = os.path.join("tkernel", "tkernel")
+    workdir = os.path.join("tkernel_new", "tkernel_new")
     config = read_config()
 
     freader = file_reader(config["dt"], workdir)

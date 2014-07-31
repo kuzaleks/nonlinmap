@@ -209,7 +209,7 @@ void transform(double *train, char *datafn, double* Kx, double *eigvecs,
     for (int i = 0; i < trTotal; i++)
 		for (int j = 0; j < trTotalExt; j++)
 			sumsumKx += Kx[i*trTotalExt + j];
-	//printf("%3.8f\n", sumsumKx);
+	printf("sumsumKx = %3.8f\n", sumsumKx);
     error = cudaMalloc((void**) &dKx, trTotal * trTotalExt * sizeof(double));
 	if (error != cudaSuccess)
     {
@@ -281,6 +281,9 @@ void transform(double *train, char *datafn, double* Kx, double *eigvecs,
     data = (double *) malloc(dataTotal * dim * sizeof(double));
     read_htk_params(data, dataTotal, dim, datafn);
     
+	if (saveToFile)	
+		save_to_file(data, dataTotal * dim, "data.bin");
+
     error = cudaMalloc((void**) &dData, dataTotal * dim * sizeof(double));
 	if (error != cudaSuccess)
     {
