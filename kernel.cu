@@ -79,7 +79,7 @@ __device__ void matrixMultiplyShared(double * A, double * B, double * C,
 		
 }
 
-__device__ double kernal_func(double sigma, double* vArr, double* wArr, 
+__device__ double kernel_rbf(double sigma, double* vArr, double* wArr, 
 							int trSampleInd, int testSampleInd, int dim) {
 	double cVal = 0.0;
 	double vEl, wEl;
@@ -90,6 +90,19 @@ __device__ double kernal_func(double sigma, double* vArr, double* wArr,
 	}
 
 	return exp(-0.5 * cVal / (sigma * sigma));
+}
+
+__device__ double kernel_lin(double sigma, double* vArr, double* wArr, 
+							int trSampleInd, int testSampleInd, int dim) {
+	double cVal = 0.0;
+	double vEl, wEl;
+	for (int i = 0; i < dim; ++i) {
+		vEl = vArr[trSampleInd * dim + i];
+		wEl = wArr[testSampleInd * dim + i];
+		cVal += vEl * wEl;
+	}
+
+	return cVal;
 }
 
 __device__ void make_tkern_device(double* train, double* test, double* Kt,
@@ -103,8 +116,7 @@ __device__ void make_tkern_device(double* train, double* test, double* Kt,
 	int colInd = bx * blockDim.x + tx;
 	
 	if (rowInd < testTotal && colInd < trTotal) {
-		Kt[rowInd*trTotal + colInd] = kernal_func(sigma, train, test, colInd, rowInd, dim);
-		//dprintf("(%d %d): %.2f\n", rowInd, colInd, Kt[rowInd*trTotal + colInd]);
+		Kt[rowInd*trTotal + colInd] = kernel_rbf(sigma, train, test, colInd, rowInd, dim);
 	}
 }
 
