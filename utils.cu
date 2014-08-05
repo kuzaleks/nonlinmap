@@ -2,6 +2,7 @@
 #include "utils.h"
 
 #include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 
 void save_to_file(double* arr, int n, const char* fname) {
@@ -78,4 +79,9 @@ float big_to_little_endian(float inBig) {
 
 	res.i = b0 | b1 | b2 | b3;
 	return res.f;
+}
+
+void base_name(char* path, char* dest) {
+	char* from = strrchr(path, '/');
+	strcpy(dest, from);
 }

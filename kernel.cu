@@ -7,6 +7,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <math.h>
 
 
@@ -23,6 +24,7 @@
     } while(0)
 
 #define MAX(a,b) (((a)>(b))?(a):(b))
+#define STR_MAX_LEN 64
 
 // Compute C = A * B
 __device__ void matrixMultiply(double * A, double * B, double * C,
@@ -170,20 +172,23 @@ __global__ void kern_transform(double* train, double* test, double* Kx,
 							   double sigma, int trTotal, int trTotalExt,
 							   int testTotal, int dim, int transDim, double sumsumK) {
 	make_tkern_device(train, test, Kt, sigma, trTotal, testTotal, dim);
-	__syncthreads();
+	//__syncthreads();
+	__threadfence();
 	estim_row_sums(Kt, Kx, KtRowsSums, KRowsSums, trTotal, trTotalExt, testTotal);
-	__syncthreads();
+	//__syncthreads();
+	__threadfence();
 	center(Kt, Kx, KtCent, KtRowsSums, KRowsSums, trTotal, trTotalExt, testTotal, sumsumK);
-	__syncthreads();
+	//__syncthreads();
+	__threadfence();
 	matrixMultiply(KtCent, eigvecs, transTest,
 			             testTotal, trTotal,
 			             trTotal, transDim,
 			             testTotal, transDim);
-	__syncthreads();		             
+	//__syncthreads();		             
 }
 
 // Helper function for using CUDA to add vectors in parallel.
-void transform(double *train, char *datafn, double* Kx, double *eigvecs, 
+void transform(double *train, char *datafn, char codetrfn[], double* Kx, double *eigvecs, 
 				int trTotal, int trTotalExt, int dim, int transDim, double sigma,
 				bool verbose, bool saveToFile)
 {
@@ -206,8 +211,8 @@ void transform(double *train, char *datafn, double* Kx, double *eigvecs,
     double * dKRowsSums;
     double sumsumKx;
     
-    
-    printf("%s\n", "Allocating GPU memory.");
+    if (verbose)
+		printf("%s\n", "Allocating GPU memory.");
     //@@ Allocate GPU memory here
     
     error = cudaMalloc((void**) &dTrain, trTotal * dim * sizeof(double));
@@ -221,7 +226,8 @@ void transform(double *train, char *datafn, double* Kx, double *eigvecs,
     for (int i = 0; i < trTotal; i++)
 		for (int j = 0; j < trTotalExt; j++)
 			sumsumKx += Kx[i*trTotalExt + j];
-	printf("sumsumKx = %3.8f\n", sumsumKx);
+	if (verbose)
+		printf("sumsumKx = %3.8f\n", sumsumKx);
     error = cudaMalloc((void**) &dKx, trTotal * trTotalExt * sizeof(double));
 	if (error != cudaSuccess)
     {
@@ -236,8 +242,8 @@ void transform(double *train, char *datafn, double* Kx, double *eigvecs,
     }
     
     
-	    
-	printf("%s\n", "Copying input memory to the GPU.");
+	if (verbose)    
+		printf("%s\n", "Copying input memory to the GPU.");
     //@@ Copy memory to the GPU here
 	error = cudaMemcpy(dTrain, train, trTotal * dim * sizeof(double), cudaMemcpyHostToDevice);
 	if (error != cudaSuccess)
@@ -271,170 +277,195 @@ void transform(double *train, char *datafn, double* Kx, double *eigvecs,
         exit(EXIT_FAILURE);
     }
     
-    printf("%s\n", "Read data to be transformed");
+	if (verbose)
+		printf("%s\n", "Read data to be transformed");
     
-    int nSamples, sampPeriod;
-    short sampSize, parmKind;
-    read_htk_header(nSamples, sampPeriod, sampSize, parmKind, datafn);
-    printf("%d %d %d %d\n", nSamples, sampPeriod, sampSize, parmKind);
-    int dataTotal = nSamples;
-    if (dim != sampSize / sizeof(float)) {
-		printf("Error! train data dim %d not equal to input data dim %d\n", dim, sampSize / sizeof(float));
-		//@@ Free the GPU memory here
-
-		cudaFree(dTrain);	
-		cudaFree(dKx);
-		cudaFree(deigvecs);
-		cudaFree(dKtRowsSums);
-		cudaFree(dKRowsSums);
+	FILE *infile = fopen(codetrfn, "r");       
+	if (infile == NULL) {
+		printf("Error! Unable to open list of files %s.\n", codetrfn); 
 		return;
-    }
+	}
+
+	char* line = (char*) malloc((STR_MAX_LEN + 1) * sizeof(char));
+	while (fscanf(infile, "%s", line) != EOF) {
+
+		printf("%s\n", line);
+
+		int nSamples, sampPeriod;
+		short sampSize, parmKind;
+		read_htk_header(nSamples, sampPeriod, sampSize, parmKind, line);
+		if (verbose)
+			printf("%d %d %d %d\n", nSamples, sampPeriod, sampSize, parmKind);
+		int dataTotal = nSamples;
+		if (dim != sampSize / sizeof(float)) {
+			printf("Error! train data dim %d not equal to input data dim %d\n", dim, sampSize / sizeof(float));
+			//@@ Free the GPU memory here
+
+			cudaFree(dTrain);	
+			cudaFree(dKx);
+			cudaFree(deigvecs);
+			cudaFree(dKtRowsSums);
+			cudaFree(dKRowsSums);
+			return;
+		}
 		
-    data = (double *) malloc(dataTotal * dim * sizeof(double));
-    read_htk_params(data, dataTotal, dim, datafn);
+		data = (double *) malloc(dataTotal * dim * sizeof(double));
+		read_htk_params(data, dataTotal, dim, line);
     
-	if (saveToFile)	
-		save_to_file(data, dataTotal * dim, "data.bin");
+		if (saveToFile)	
+			save_to_file(data, dataTotal * dim, "data.bin");
 
-    error = cudaMalloc((void**) &dData, dataTotal * dim * sizeof(double));
-	if (error != cudaSuccess)
-    {
-        printf("cudaMalloc dData returned error code %d, line(%d)\n", error, __LINE__);
-        exit(EXIT_FAILURE);
-    }
-    error = cudaMemcpy(dData, data, dataTotal * dim * sizeof(double), cudaMemcpyHostToDevice);
-	if (error != cudaSuccess)
-    {
-        printf("cudaMemcpy (data to dData) returned error code %d, line(%d)\n", error, __LINE__);
-        exit(EXIT_FAILURE);
-    }
+		error = cudaMalloc((void**) &dData, dataTotal * dim * sizeof(double));
+		if (error != cudaSuccess)
+		{
+			printf("cudaMalloc dData returned error code %d, line(%d)\n", error, __LINE__);
+			exit(EXIT_FAILURE);
+		}
+		error = cudaMemcpy(dData, data, dataTotal * dim * sizeof(double), cudaMemcpyHostToDevice);
+		if (error != cudaSuccess)
+		{
+			printf("cudaMemcpy (data to dData) returned error code %d, line(%d)\n", error, __LINE__);
+			exit(EXIT_FAILURE);
+		}
     
-    error = cudaMalloc((void**) &dTransData, dataTotal * transDim * sizeof(double));
-	if (error != cudaSuccess)
-    {
-        printf("cudaMalloc dTransData returned error code %d, line(%d)\n", error, __LINE__);
-        exit(EXIT_FAILURE);
-    }
+		error = cudaMalloc((void**) &dTransData, dataTotal * transDim * sizeof(double));
+		if (error != cudaSuccess)
+		{
+			printf("cudaMalloc dTransData returned error code %d, line(%d)\n", error, __LINE__);
+			exit(EXIT_FAILURE);
+		}
     
-    error = cudaMalloc((void**) &dtKern, dataTotal * trTotal * sizeof(double));
-	if (error != cudaSuccess)
-    {
-        printf("cudaMalloc dtKern returned error code %d, line(%d)\n", error, __LINE__);
-        exit(EXIT_FAILURE);
-    }
-    error = cudaMalloc((void**) &dtKernCentr, dataTotal * trTotal * sizeof(double));
-	if (error != cudaSuccess)
-    {
-        printf("cudaMalloc dtKernCentr returned error code %d, line(%d)\n", error, __LINE__);
-        exit(EXIT_FAILURE);
-    }
+		error = cudaMalloc((void**) &dtKern, dataTotal * trTotal * sizeof(double));
+		if (error != cudaSuccess)
+		{
+			printf("cudaMalloc dtKern returned error code %d, line(%d)\n", error, __LINE__);
+			exit(EXIT_FAILURE);
+		}
+		error = cudaMalloc((void**) &dtKernCentr, dataTotal * trTotal * sizeof(double));
+		if (error != cudaSuccess)
+		{
+			printf("cudaMalloc dtKernCentr returned error code %d, line(%d)\n", error, __LINE__);
+			exit(EXIT_FAILURE);
+		}
     
-    //@@ Initialize the grid and block dimensions here
-    dim3 DimGrid((trTotal - 1)/THREADS_IN_BLOCK + 1, (dataTotal - 1)/THREADS_IN_BLOCK + 1, 1);
-	dim3 DimBlock(THREADS_IN_BLOCK, THREADS_IN_BLOCK, 1);
+		//@@ Initialize the grid and block dimensions here
+		dim3 DimGrid((trTotal - 1)/THREADS_IN_BLOCK + 1, (dataTotal - 1)/THREADS_IN_BLOCK + 1, 1);
+		dim3 DimBlock(THREADS_IN_BLOCK, THREADS_IN_BLOCK, 1);
 
-	printf("%s\n", "Performing CUDA computation");
-    //@@ Launch the GPU Kernel here
-	// Allocate CUDA events that we'll use for timing
+		if (verbose)
+			printf("%s\n", "Performing CUDA computation");
+		//@@ Launch the GPU Kernel here
+		// Allocate CUDA events that we'll use for timing
 	
-    cudaEvent_t start;
-    error = cudaEventCreate(&start);
+		cudaEvent_t start;
+		error = cudaEventCreate(&start);
 
-    cudaEvent_t stop;
-    error = cudaEventCreate(&stop);
+		cudaEvent_t stop;
+		error = cudaEventCreate(&stop);
 
-	// Record the start event
-    error = cudaEventRecord(start, NULL);
+		// Record the start event
+		error = cudaEventRecord(start, NULL);
     
-    kern_transform<<<DimGrid, DimBlock>>>(dTrain, dData, dKx, deigvecs, dtKern, dtKernCentr, dTransData,
-										  dKtRowsSums, dKRowsSums,
-										  sigma, trTotal, trTotalExt, dataTotal, dim, transDim, sumsumKx);
+		kern_transform<<<DimGrid, DimBlock>>>(dTrain, dData, dKx, deigvecs, dtKern, dtKernCentr, dTransData,
+											  dKtRowsSums, dKRowsSums,
+											  sigma, trTotal, trTotalExt, dataTotal, dim, transDim, sumsumKx);
 											
-	cudaThreadSynchronize();
-	
-	// Record the stop event
-    error = cudaEventRecord(stop, NULL);
+		//cudaThreadSynchronize();
+		cudaDeviceSynchronize();
+		// Record the stop event
+		error = cudaEventRecord(stop, NULL);
     
-	error = cudaEventSynchronize(stop);
+		error = cudaEventSynchronize(stop);
 	
-	float msecTotal = 0.0f;
-	error = cudaEventElapsedTime(&msecTotal, start, stop);
-	printf("Performance: Time= %.3f msec\n", msecTotal);
+		float msecTotal = 0.0f;
+		error = cudaEventElapsedTime(&msecTotal, start, stop);
+		printf("Performance: Time= %.3f msec\n", msecTotal);
 	
 	
-	printf("%s\n", "Copying output memory to the CPU");
-    //@@ Copy the GPU memory back to the CPU here
+		if (verbose)
+			printf("%s\n", "Copying output memory to the CPU");
+		//@@ Copy the GPU memory back to the CPU here
     
-    int tKernRows = dataTotal;
-    int tKernCols = trTotal;
-    double * tKern = (double *) malloc(tKernRows * tKernCols * sizeof(double));
-	error = cudaMemcpy(tKern, dtKern, dataTotal * trTotal * sizeof(double), cudaMemcpyDeviceToHost);
-	if (error != cudaSuccess)
-    {
-        printf("cudaMemcpy (dtKern to tKern) returned error code %d, line(%d)\n", error, __LINE__);
-        exit(EXIT_FAILURE);
-    }
-    if (verbose)
-		print_matr(tKern, dataTotal, trTotal);
-	if (saveToFile)	
-		save_to_file(tKern, dataTotal * trTotal, "tkern.bin");
+		if (saveToFile) {
+			int tKernRows = dataTotal;
+			int tKernCols = trTotal;
+			double * tKern = (double *) malloc(tKernRows * tKernCols * sizeof(double));
+			error = cudaMemcpy(tKern, dtKern, dataTotal * trTotal * sizeof(double), cudaMemcpyDeviceToHost);
+			if (error != cudaSuccess)
+			{
+				printf("cudaMemcpy (dtKern to tKern) returned error code %d, line(%d)\n", error, __LINE__);
+				exit(EXIT_FAILURE);
+			}
+			
+			save_to_file(tKern, dataTotal * trTotal, "tkern.bin");
+			free(tKern);
+		}
+		transData = (double *) malloc(dataTotal * transDim * sizeof(double));
+		error = cudaMemcpy(transData, dTransData, dataTotal * transDim * sizeof(double), cudaMemcpyDeviceToHost);
+		if (error != cudaSuccess)
+		{
+			printf("cudaMemcpy (dTransData to transData) returned error code %d, line(%d)\n", error, __LINE__);
+			exit(EXIT_FAILURE);
+		}
+		if (saveToFile) {
+			save_to_file(transData, dataTotal * transDim, "trans_test.bin");
+		}
+
+		char path[STR_MAX_LEN + 1] = "data/transgpu/";
+		char fn[STR_MAX_LEN + 1];
+		base_name(line, fn);
+		strcat(path, fn);
+		save_to_file(transData, dataTotal * transDim, path);
+
+		if (saveToFile) {
+			tKernCentr = (double *) malloc(dataTotal * trTotal * sizeof(double));
+			error = cudaMemcpy(tKernCentr, dtKernCentr, dataTotal * trTotal * sizeof(double), cudaMemcpyDeviceToHost);
+			if (error != cudaSuccess)
+			{
+				printf("cudaMemcpy (dtKernCentr to tKernCentr) returned error code %d, line(%d)\n", error, __LINE__);
+				exit(EXIT_FAILURE);
+			}
 		
-	transData = (double *) malloc(dataTotal * transDim * sizeof(double));
-	error = cudaMemcpy(transData, dTransData, dataTotal * transDim * sizeof(double), cudaMemcpyDeviceToHost);
-	if (error != cudaSuccess)
-    {
-        printf("cudaMemcpy (dTransData to transData) returned error code %d, line(%d)\n", error, __LINE__);
-        exit(EXIT_FAILURE);
-    }
-    if (verbose)
-		print_matr(transData, dataTotal, transDim);
-	if (saveToFile)
-		save_to_file(transData, dataTotal * transDim, "trans_test.bin");
-		
-	tKernCentr = (double *) malloc(dataTotal * trTotal * sizeof(double));
-	error = cudaMemcpy(tKernCentr, dtKernCentr, dataTotal * trTotal * sizeof(double), cudaMemcpyDeviceToHost);
-	if (error != cudaSuccess)
-    {
-        printf("cudaMemcpy (dtKernCentr to tKernCentr) returned error code %d, line(%d)\n", error, __LINE__);
-        exit(EXIT_FAILURE);
-    }
-    if (verbose)
-		print_matr(tKernCentr, dataTotal, trTotal);
-	if (saveToFile)
-		save_to_file(tKernCentr, dataTotal * trTotal, "t_kern_centr.bin");
-	free(tKernCentr);
+			save_to_file(tKernCentr, dataTotal * trTotal, "t_kern_centr.bin");
+			free(tKernCentr);
+		}
+		if (verbose)
+			printf("%s\n", "Freeing GPU Memory");
 	
-	printf("%s\n", "Freeing GPU Memory");
-	
-    //@@ Free the GPU memory here
-    cudaFree(dData);
-    cudaFree(dTransData);
-    
+		//@@ Free the GPU memory here
+		cudaFree(dData);
+		cudaFree(dTransData);
+		cudaFree(dtKern);
+		cudaFree(dtKernCentr);
+
+		free(data);
+		free(transData);
+	}
 	cudaFree(dTrain);
 	
 	cudaFree(dKx);
-	cudaFree(dtKern);
-	cudaFree(dtKernCentr);
+	
 	cudaFree(deigvecs);
 	
 	cudaFree(dKtRowsSums);
 	cudaFree(dKRowsSums);
 	
-	printf("%s\n", "Freeing RAM Memory");
-	free(data);
-	free(transData);
-    free(tKern);
+	if (verbose)
+		printf("%s\n", "Freeing RAM Memory");
+	free(line);
 	
 }
 
 
 int main()
 {
+	char codetrfn[] = "codetr.scp";
+
 	double sigma = 19.63;
     int dim = 13;
     int transDim = dim;
     
-    bool verbose = false;
+    bool verbose = true;
     bool saveToFile = true;
     
     int trTotal = 1917;
@@ -444,7 +475,7 @@ int main()
     double * eigvecs;
     double * Kx;
     
-    
+
     printf("%s\n", "Importing data and creating memory on host");
     
     train = (double *) malloc(trTotal * dim * sizeof(double));
@@ -460,30 +491,16 @@ int main()
 	read_file(Kx, trTotal * trTotalExt, "Kx.bin");
 	
     
-	/*fill_matr(test, testTotal, dim);
-	if (verbose)
-		print_matr(data, dataTotal, dim);
-	
-	if (saveToFile)	
-		save_to_file(data, dataTotal * dim, "test.bin");
-	*/
 	eigvecs = (double *) malloc(trTotal * transDim * sizeof(double));
 	read_file(eigvecs, trTotal * transDim, "eigvecs.bin");
-	// fill_matr(eigvecs, trTotal, transDim);
-	if (verbose)
-		print_matr(eigvecs, trTotal, transDim);
-	// save_to_file(eigvecs, trTotal * transDim, "eigvecs.bin");
 	
-	
-    //@@ Allocate the hostC matrix
     printf("%s\n", "Importing data and creating memory on host");
 	
     printf("%s %d %s %d\n", "The dimensions of train are ", trTotal, " x ", dim);
-    //printf("%s %d %s %d\n", "The dimensions of test are ", testTotal, " x ", dim);
-
+    
 	char testfn[] = "Word_44.mfc";
 
-	transform(train, testfn, Kx, eigvecs,
+	transform(train, testfn, codetrfn, Kx, eigvecs,
 			  trTotal, trTotalExt, dim, transDim, 
 			  sigma, verbose, saveToFile);
     

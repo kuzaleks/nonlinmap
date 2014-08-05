@@ -4,6 +4,8 @@ import sys, os, json, pickle
 import numpy as np
 import mlpy
 
+from htkfiles import ParamCollector
+
 def vsum(v, w): return [elv + elw for (elv, elw) in zip(v, w)]
 
 def scal(alpha, v): return [alpha * el for el in v]
@@ -57,7 +59,7 @@ def test_tkernel():
     freader = file_reader(dt, workdir)
 
     trainfn = "train.bin"
-    testfn = "test.bin"
+    testfn = "data.bin"
     tkernfn = "tkern.bin"
     
     train = freader(trainfn, dim)
@@ -104,7 +106,7 @@ def test_trans_data():
     freader = file_reader(dt, workdir)
 
     trainfn = "train.bin"
-    testfn = "test.bin"
+    testfn = "data.bin"
     tkernfn = "tkern.bin"
     eigvecsfn = "eigvecs.bin"
     transfn = "trans_test.bin"
@@ -142,7 +144,7 @@ def test_centering():
 
     freader = file_reader(config["dt"], workdir)
 
-    testfn = "test.bin"
+    testfn = "data.bin"
     trainfn = "train.bin"
     tkernfn = "tkern.bin"
     Kxfn = "Kx.bin"
@@ -164,6 +166,24 @@ def test_centering():
 
     assert np.allclose(tKernEstimedCent, gpuTKernCent, atol=1e-5)
 
+def bulk_test():
+    workdir = os.path.join("tkernel_new", "tkernel_new")
+    config = read_config()
+    transDim = config["transDim"]
+
+    freader = file_reader(config["dt"], workdir)
+    gpupath = os.path.join("data", "transgpu")
+    transgpufns = os.listdir(os.path.join(workdir, gpupath))
+    refpath = os.path.join("data", "transformed")
+    reffns = os.listdir(os.path.join(workdir, refpath))
+
+    for fn in transgpufns:
+        gpuData = freader(os.path.join(gpupath, fn), transDim)
+        pc = ParamCollector(os.path.join(workdir, refpath, fn))
+        pc.store_sample_matrix()
+        sMatr = np.array(pc.sampleMatrix)
+        assert np.allclose(gpuData, sMatr, atol=1e-1)
+        
 
 def main():
     args = sys.argv[1:]

@@ -2,6 +2,9 @@ images/
 data/
 nonlinmap/
 tkernel/
+tkernel_new/
+*.scp
 *~
 *.pyc
 *.pkl
+\#*
