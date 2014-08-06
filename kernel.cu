@@ -166,24 +166,6 @@ __global__ void center(double* Kt, double* K, double* KtCent, double* KtRowsSums
 	}
 }
 
-__global__ void kern_transform(double* train, double* test, double* Kx,
-							   double* eigvecs, double* Kt, double * KtCent, double* transTest, 
-							   double* KtRowsSums, double* KRowsSums,
-							   double sigma, int trTotal, int trTotalExt,
-							   int testTotal, int dim, int transDim, double sumsumK) {
-	make_tkern_device(train, test, Kt, sigma, trTotal, testTotal, dim);
-	__syncthreads();
-	estim_row_sums(Kt, Kx, KtRowsSums, KRowsSums, trTotal, trTotalExt, testTotal);
-	__syncthreads();
-	center(Kt, Kx, KtCent, KtRowsSums, KRowsSums, trTotal, trTotalExt, testTotal, sumsumK);
-	__syncthreads();
-	matrixMultiply(KtCent, eigvecs, transTest,
-			             testTotal, trTotal,
-			             trTotal, transDim,
-			             testTotal, transDim);
-	//__syncthreads();		             
-}
-
 // Helper function for using CUDA to add vectors in parallel.
 void transform(double *train, char *datafn, char codetrfn[], double* Kx, double *eigvecs, 
 				int trTotal, int trTotalExt, int dim, int transDim, double sigma,
@@ -368,10 +350,7 @@ void transform(double *train, char *datafn, char codetrfn[], double* Kx, double 
 		center<<<DimGrid, DimBlock>>>(dtKern, dKx, dtKernCentr, dKtRowsSums, dKRowsSums, trTotal, trTotalExt, dataTotal, sumsumKx);
 		matrixMultiply<<<DimGrid, DimBlock>>>(dtKernCentr, deigvecs, dTransData, dataTotal, trTotal,
 												trTotal, transDim, dataTotal, transDim);
-		/*kern_transform<<<DimGrid, DimBlock>>>(dTrain, dData, dKx, deigvecs, dtKern, dtKernCentr, dTransData,
-											  dKtRowsSums, dKRowsSums,
-											  sigma, trTotal, trTotalExt, dataTotal, dim, transDim, sumsumKx);
-			*/								
+									
 		//cudaThreadSynchronize();
 		cudaDeviceSynchronize();
 		// Record the stop event
