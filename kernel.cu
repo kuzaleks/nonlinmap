@@ -27,7 +27,7 @@
 #define STR_MAX_LEN 64
 
 // Compute C = A * B
-__device__ void matrixMultiply(double * A, double * B, double * C,
+__global__ void matrixMultiply(double * A, double * B, double * C,
                    int numARows, int numAColumns,
                    int numBRows, int numBColumns,
                    int numCRows, int numCColumns) {
@@ -107,7 +107,7 @@ __device__ double kernel_lin(double sigma, double* vArr, double* wArr,
 	return cVal;
 }
 
-__device__ void make_tkern_device(double* train, double* test, double* Kt,
+__global__ void make_tkern_device(double* train, double* test, double* Kt,
 								double sigma,
 								int trTotal, int testTotal, int dim) {
 								
@@ -122,7 +122,7 @@ __device__ void make_tkern_device(double* train, double* test, double* Kt,
 	}
 }
 
-__device__ void estim_row_sums(double* Kt, double* K, double* KtRowsSums, double* KRowsSums,
+__global__ void estim_row_sums(double* Kt, double* K, double* KtRowsSums, double* KRowsSums,
 								int trTotal, int trTotalExt, int testTotal) {
 	int bx = blockIdx.x, by = blockIdx.y;
 	int tx = threadIdx.x, ty = threadIdx.y;
@@ -144,7 +144,7 @@ __device__ void estim_row_sums(double* Kt, double* K, double* KtRowsSums, double
 	}
 }
 
-__device__ void center(double* Kt, double* K, double* KtCent, double* KtRowsSums, double* KRowsSums, 
+__global__ void center(double* Kt, double* K, double* KtCent, double* KtRowsSums, double* KRowsSums, 
 						int trTotal, int trTotalExt, int testTotal, double sumsumK) {
 	int bx = blockIdx.x, by = blockIdx.y;
 	int tx = threadIdx.x, ty = threadIdx.y;
@@ -172,14 +172,11 @@ __global__ void kern_transform(double* train, double* test, double* Kx,
 							   double sigma, int trTotal, int trTotalExt,
 							   int testTotal, int dim, int transDim, double sumsumK) {
 	make_tkern_device(train, test, Kt, sigma, trTotal, testTotal, dim);
-	//__syncthreads();
-	__threadfence();
+	__syncthreads();
 	estim_row_sums(Kt, Kx, KtRowsSums, KRowsSums, trTotal, trTotalExt, testTotal);
-	//__syncthreads();
-	__threadfence();
+	__syncthreads();
 	center(Kt, Kx, KtCent, KtRowsSums, KRowsSums, trTotal, trTotalExt, testTotal, sumsumK);
-	//__syncthreads();
-	__threadfence();
+	__syncthreads();
 	matrixMultiply(KtCent, eigvecs, transTest,
 			             testTotal, trTotal,
 			             trTotal, transDim,
@@ -366,10 +363,15 @@ void transform(double *train, char *datafn, char codetrfn[], double* Kx, double 
 		// Record the start event
 		error = cudaEventRecord(start, NULL);
     
-		kern_transform<<<DimGrid, DimBlock>>>(dTrain, dData, dKx, deigvecs, dtKern, dtKernCentr, dTransData,
+		make_tkern_device<<<DimGrid, DimBlock>>>(dTrain, dData, dtKern, sigma, trTotal, dataTotal, dim);
+		estim_row_sums<<<DimGrid, DimBlock>>>(dtKern, dKx, dKtRowsSums, dKRowsSums, trTotal, trTotalExt, dataTotal);
+		center<<<DimGrid, DimBlock>>>(dtKern, dKx, dtKernCentr, dKtRowsSums, dKRowsSums, trTotal, trTotalExt, dataTotal, sumsumKx);
+		matrixMultiply<<<DimGrid, DimBlock>>>(dtKernCentr, deigvecs, dTransData, dataTotal, trTotal,
+												trTotal, transDim, dataTotal, transDim);
+		/*kern_transform<<<DimGrid, DimBlock>>>(dTrain, dData, dKx, deigvecs, dtKern, dtKernCentr, dTransData,
 											  dKtRowsSums, dKRowsSums,
 											  sigma, trTotal, trTotalExt, dataTotal, dim, transDim, sumsumKx);
-											
+			*/								
 		//cudaThreadSynchronize();
 		cudaDeviceSynchronize();
 		// Record the stop event
