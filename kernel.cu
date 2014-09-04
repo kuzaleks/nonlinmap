@@ -393,11 +393,12 @@ void transform(double *train, char *datafn, char codetrfn[], double* Kx, double 
 			save_to_file(transData, dataTotal * transDim, "trans_test.bin");
 		}
 
-		char path[STR_MAX_LEN + 1] = "data/transgpu/";
+		char path[STR_MAX_LEN + 1] = "rodrech/transformed/";
 		char fn[STR_MAX_LEN + 1];
 		base_name(line, fn);
 		strcat(path, fn);
-		save_to_file(transData, dataTotal * transDim, path);
+		//save_to_file(transData, dataTotal * transDim, path);
+		write_htk_params(transData, nSamples, sampPeriod, sampSize, parmKind, path);
 
 		if (saveToFile) {
 			tKernCentr = (double *) malloc(dataTotal * trTotal * sizeof(double));
@@ -443,17 +444,17 @@ void transform(double *train, char *datafn, char codetrfn[], double* Kx, double 
 
 int main()
 {
-	char codetrfn[] = "codetr.scp";
-	char baseDir[] = "./";
+	char codetrfn[] = "rr_codetr.scp";
+	char baseDir[] = "gpu_data/";
 	double sigma = 19.63;
     int dim = 13;
     int transDim = dim;
     
     bool verbose = false;
-    bool saveToFile = true;
+    bool saveToFile = false;
     
-    int trTotal = 1917;
-    int trTotalExt = 3834;
+    int trTotal = 2991;// 1917;
+    int trTotalExt = 7479; // 3834;
    // int dataTotal = 10000;
     double * train; 
     double * eigvecs;

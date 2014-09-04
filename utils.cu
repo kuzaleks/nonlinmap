@@ -85,3 +85,15 @@ void base_name(char* path, char* dest) {
 	char* from = strrchr(path, '/');
 	strcpy(dest, from);
 }
+
+int reversed_bytes_order(int genuin) {
+	return big_to_little_endian(genuin);
+}
+
+float reversed_bytes_order(float genuin) {
+	return big_to_little_endian(genuin);
+}
+
+short reversed_bytes_order(short genuin) {
+	return big_to_little_endian(genuin);
+}
