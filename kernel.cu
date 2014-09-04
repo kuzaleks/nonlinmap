@@ -266,6 +266,7 @@ void transform(double *train, char *datafn, char codetrfn[], double* Kx, double 
 	}
 
 	char* line = (char*) malloc((STR_MAX_LEN + 1) * sizeof(char));
+	float secTotal = 0.0;
 	while (fscanf(infile, "%s", line) != EOF) {
 
 		printf("%s\n", line);
@@ -358,10 +359,10 @@ void transform(double *train, char *datafn, char codetrfn[], double* Kx, double 
     
 		error = cudaEventSynchronize(stop);
 	
-		float msecTotal = 0.0f;
-		error = cudaEventElapsedTime(&msecTotal, start, stop);
-		printf("Performance: Time= %.3f msec\n", msecTotal);
-	
+		float currSecTotal = 0.0f;
+		error = cudaEventElapsedTime(&currSecTotal, start, stop);
+		printf("Performance: Time= %.3f msec\n", currSecTotal);
+		secTotal += currSecTotal;
 	
 		if (verbose)
 			printf("%s\n", "Copying output memory to the CPU");
@@ -422,6 +423,8 @@ void transform(double *train, char *datafn, char codetrfn[], double* Kx, double 
 		free(data);
 		free(transData);
 	}
+
+	printf("Overall Performance: Time= %.3f msec\n", secTotal);
 	cudaFree(dTrain);
 	
 	cudaFree(dKx);
@@ -441,12 +444,12 @@ void transform(double *train, char *datafn, char codetrfn[], double* Kx, double 
 int main()
 {
 	char codetrfn[] = "codetr.scp";
-
+	char baseDir[] = "./";
 	double sigma = 19.63;
     int dim = 13;
     int transDim = dim;
     
-    bool verbose = true;
+    bool verbose = false;
     bool saveToFile = true;
     
     int trTotal = 1917;
@@ -460,20 +463,41 @@ int main()
     printf("%s\n", "Importing data and creating memory on host");
     
     train = (double *) malloc(trTotal * dim * sizeof(double));
-    read_file(train, trTotal * dim, "tr_data_subset.bin");
+
+	char trainSSPath[STR_MAX_LEN + 1];
+	strcpy(trainSSPath, baseDir);
+	strcat(trainSSPath, "tr_data_subset.bin");
+
+    read_file(train, trTotal * dim, trainSSPath);
     /*fill_matr(train, trTotal, dim);
 	if (verbose)
 		print_matr(train, trTotal, dim);
 	*/	
-	if (saveToFile)
-		save_to_file(train, trTotal * dim, "train.bin");
+	if (saveToFile) {
+		char trainPath[STR_MAX_LEN + 1];
+		strcpy(trainPath, baseDir);
+		strcat(trainPath, "train.bin");
+		save_to_file(train, trTotal * dim, trainPath);
+	}
 	
 	Kx = (double *) malloc(trTotal * trTotalExt * sizeof(double));
-	read_file(Kx, trTotal * trTotalExt, "Kx.bin");
+
+	char KxPath[STR_MAX_LEN + 1];
+	strcpy(KxPath, baseDir);
+	strcat(KxPath, "Kx.bin");
+	printf("%s", KxPath);
+
+	read_file(Kx, trTotal * trTotalExt, KxPath);
 	
     
 	eigvecs = (double *) malloc(trTotal * transDim * sizeof(double));
-	read_file(eigvecs, trTotal * transDim, "eigvecs.bin");
+
+	char eigvecsPath[STR_MAX_LEN + 1];
+	strcpy(eigvecsPath, baseDir);
+	strcat(eigvecsPath, "eigvecs.bin");
+	printf("%s", eigvecsPath);
+
+	read_file(eigvecs, trTotal * transDim, eigvecsPath);
 	
     printf("%s\n", "Importing data and creating memory on host");
 	
