@@ -34,7 +34,7 @@ def centered_kernel_matrix(Kt, KSub):
 
 def read_config(fn=""):
     config = {}
-    config["sigma"] = 19.63;
+    config["sigma"] = 26.195884 # 19.63;
     config["dim"] = 13;
     config["transDim"] = 13;
     config["dt"] = np.dtype('<d')
@@ -50,7 +50,7 @@ def file_reader(dt, workdir):
 
 def test_tkernel():
         
-    workdir = os.path.join("tkernel_new", "tkernel_new")
+    workdir = os.path.join("tkernel_new", "tkernel_new", "rodrech")
     config = read_config()
     dim = config["dim"]
     dt = config["dt"]
@@ -95,8 +95,8 @@ class NLTransformer(object):
     
         
 
-def test_trans_data():
-    workdir = os.path.join("tkernel_new", "tkernel_new")
+def test_trans_data(): #test
+    workdir = os.path.join("tkernel_new", "tkernel_new", "rodrech")
     config = read_config()
     dim = config["dim"]
     transDim = config["transDim"]
@@ -124,7 +124,7 @@ def test_trans_data():
 
     test = freader(testfn, dim)
     nTest = test.shape[0]
-    trTotalExt = 3834
+    trTotalExt = 7479 #3834
     tformer = NLTransformer(trainfn, Kxfn, trTotalExt, eigvecsfn, \
                                 workdir, config)
     transTestEstimed = tformer.transform(test)
@@ -138,8 +138,8 @@ def test_trans_data():
 
     assert np.allclose(transTest, transTestEstimed, atol=1e-5)
 
-def test_centering():
-    workdir = os.path.join("tkernel_new", "tkernel_new")
+def test_centering(): #test
+    workdir = os.path.join("tkernel_new", "tkernel_new", "rodrech")
     config = read_config()
 
     freader = file_reader(config["dt"], workdir)
@@ -158,7 +158,7 @@ def test_centering():
     sigma = config["sigma"]
     tKernEstimed = np.array([[np.exp(-0.5 * np.dot(trEl-testEl, trEl-testEl)/sigma**2) for trEl in train] for testEl in test])
 
-    trTotalExt = 3834
+    trTotalExt = 7479 # 3834
     Kx = freader(Kxfn, trTotalExt)
     tKernEstimedCent = mlpy.kernel_center(tKernEstimed, Kx.T)
 
@@ -166,23 +166,27 @@ def test_centering():
 
     assert np.allclose(tKernEstimedCent, gpuTKernCent, atol=1e-5)
 
-def bulk_test():
+def bulk_test(): #test
     workdir = os.path.join("tkernel_new", "tkernel_new")
     config = read_config()
     transDim = config["transDim"]
 
     freader = file_reader(config["dt"], workdir)
-    gpupath = os.path.join("data", "transgpu")
+    gpupath =  os.path.join("rodrech", "transformed")# os.path.join("data", "transgpu")
     transgpufns = os.listdir(os.path.join(workdir, gpupath))
-    refpath = os.path.join("data", "transformed")
+    refpath = os.path.join("rodrech", "ref_transformed") # os.path.join("data", "transformed")
     reffns = os.listdir(os.path.join(workdir, refpath))
-
+    troubleFiles = []
     for fn in transgpufns:
         gpuData = freader(os.path.join(gpupath, fn), transDim)
         pc = ParamCollector(os.path.join(workdir, refpath, fn))
         pc.store_sample_matrix()
         sMatr = np.array(pc.sampleMatrix)
-        assert np.allclose(gpuData, sMatr, atol=1e-1)
+        try:
+            assert np.allclose(gpuData, sMatr, atol=1e-1)
+        except AssertionError:
+            troubleFiles.append(fn)
+    return troubleFiles
         
 
 def main():

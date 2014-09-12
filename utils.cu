@@ -83,6 +83,8 @@ float big_to_little_endian(float inBig) {
 
 void base_name(char* path, char* dest) {
 	char* from = strrchr(path, '/');
+	if (from == NULL)
+		from = strrchr(path, '\\') + 1;
 	strcpy(dest, from);
 }
 

@@ -243,12 +243,6 @@ void transform(double *train, char *datafn, char codetrfn[], double* Kx, double 
         printf("cudaMemcpy (eigvecs, deigvecs) returned error code %d, line(%d)\n", error, __LINE__);
         exit(EXIT_FAILURE);
     }
-    error = cudaMalloc((void**) &dKtRowsSums, trTotal * sizeof(double));
-    if (error != cudaSuccess)
-    {
-        printf("cudaMalloc dKtRowsSums returned error code %d, line(%d)\n", error, __LINE__);
-        exit(EXIT_FAILURE);
-    }
     error = cudaMalloc((void**) &dKRowsSums, trTotal * sizeof(double));
     if (error != cudaSuccess)
     {
@@ -293,7 +287,7 @@ void transform(double *train, char *datafn, char codetrfn[], double* Kx, double 
 		read_htk_params(data, dataTotal, dim, line);
     
 		if (saveToFile)	
-			save_to_file(data, dataTotal * dim, "data.bin");
+			save_to_file(data, dataTotal * dim, "rodrech/data.bin");
 
 		error = cudaMalloc((void**) &dData, dataTotal * dim * sizeof(double));
 		if (error != cudaSuccess)
@@ -321,6 +315,12 @@ void transform(double *train, char *datafn, char codetrfn[], double* Kx, double 
 			printf("cudaMalloc dtKern returned error code %d, line(%d)\n", error, __LINE__);
 			exit(EXIT_FAILURE);
 		}
+		error = cudaMalloc((void**) &dKtRowsSums, dataTotal * sizeof(double));
+		if (error != cudaSuccess)
+		{
+			printf("cudaMalloc dKtRowsSums returned error code %d, line(%d)\n", error, __LINE__);
+			exit(EXIT_FAILURE);
+		}
 		error = cudaMalloc((void**) &dtKernCentr, dataTotal * trTotal * sizeof(double));
 		if (error != cudaSuccess)
 		{
@@ -329,6 +329,7 @@ void transform(double *train, char *datafn, char codetrfn[], double* Kx, double 
 		}
     
 		//@@ Initialize the grid and block dimensions here
+		// int trainVSdataMax = MAX(trTotal, dataTotal);
 		dim3 DimGrid((trTotal - 1)/THREADS_IN_BLOCK + 1, (dataTotal - 1)/THREADS_IN_BLOCK + 1, 1);
 		dim3 DimBlock(THREADS_IN_BLOCK, THREADS_IN_BLOCK, 1);
 
@@ -378,8 +379,11 @@ void transform(double *train, char *datafn, char codetrfn[], double* Kx, double 
 				printf("cudaMemcpy (dtKern to tKern) returned error code %d, line(%d)\n", error, __LINE__);
 				exit(EXIT_FAILURE);
 			}
-			
-			save_to_file(tKern, dataTotal * trTotal, "tkern.bin");
+			if (verbose)
+				printf("%s\n", "Saving tKern to disc...");
+			save_to_file(tKern, dataTotal * trTotal, "rodrech/tkern.bin");
+			if (verbose)
+				printf("%s\n", "tKern has been Saved!");
 			free(tKern);
 		}
 		transData = (double *) malloc(dataTotal * transDim * sizeof(double));
@@ -390,15 +394,20 @@ void transform(double *train, char *datafn, char codetrfn[], double* Kx, double 
 			exit(EXIT_FAILURE);
 		}
 		if (saveToFile) {
-			save_to_file(transData, dataTotal * transDim, "trans_test.bin");
+			if (verbose)
+				printf("%s\n", "Saving transData for test to disc...");
+			save_to_file(transData, dataTotal * transDim, "rodrech/trans_test.bin");
+			if (verbose)
+				printf("%s\n", "transData for test has been Saved!");
 		}
 
 		char path[STR_MAX_LEN + 1] = "rodrech/transformed/";
 		char fn[STR_MAX_LEN + 1];
 		base_name(line, fn);
 		strcat(path, fn);
-		//save_to_file(transData, dataTotal * transDim, path);
-		write_htk_params(transData, nSamples, sampPeriod, sampSize, parmKind, path);
+		printf("%s\n", path);
+		save_to_file(transData, dataTotal * transDim, path);
+		//write_htk_params(transData, nSamples, sampPeriod, sampSize, parmKind, path);
 
 		if (saveToFile) {
 			tKernCentr = (double *) malloc(dataTotal * trTotal * sizeof(double));
@@ -408,8 +417,11 @@ void transform(double *train, char *datafn, char codetrfn[], double* Kx, double 
 				printf("cudaMemcpy (dtKernCentr to tKernCentr) returned error code %d, line(%d)\n", error, __LINE__);
 				exit(EXIT_FAILURE);
 			}
-		
-			save_to_file(tKernCentr, dataTotal * trTotal, "t_kern_centr.bin");
+			if (verbose)
+				printf("%s\n", "Saving tKernCentr to disc...");
+			save_to_file(tKernCentr, dataTotal * trTotal, "rodrech/t_kern_centr.bin");
+			if (verbose)
+				printf("%s\n", "tKernCentr has been Saved!");
 			free(tKernCentr);
 		}
 		if (verbose)
@@ -420,6 +432,7 @@ void transform(double *train, char *datafn, char codetrfn[], double* Kx, double 
 		cudaFree(dTransData);
 		cudaFree(dtKern);
 		cudaFree(dtKernCentr);
+		cudaFree(dKtRowsSums);
 
 		free(data);
 		free(transData);
@@ -427,12 +440,8 @@ void transform(double *train, char *datafn, char codetrfn[], double* Kx, double 
 
 	printf("Overall Performance: Time= %.3f msec\n", secTotal);
 	cudaFree(dTrain);
-	
 	cudaFree(dKx);
-	
 	cudaFree(deigvecs);
-	
-	cudaFree(dKtRowsSums);
 	cudaFree(dKRowsSums);
 	
 	if (verbose)
@@ -446,7 +455,7 @@ int main()
 {
 	char codetrfn[] = "rr_codetr.scp";
 	char baseDir[] = "gpu_data/";
-	double sigma = 19.63;
+	double sigma = 26.195884; // 19.63;
     int dim = 13;
     int transDim = dim;
     
