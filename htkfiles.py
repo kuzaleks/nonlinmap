@@ -43,13 +43,13 @@ class ParamCollector(object):
         """
 
         fileObj = open(self.paramFileName, 'rb')
-        self.htk_param_header(fileObj)
+        try:
+            self.htk_param_header(fileObj)
+            FLOAT_SIZE = 4
 
-        FLOAT_SIZE = 4
-
-        for smplInd in range(self.header['nSamples']):
-            sample = self.next_sample_from_file(fileObj, 
-                                                self.header['sampSize'] // FLOAT_SIZE)
-            self.sampleMatrix.append(sample)
-
-        fileObj.close()
+            for smplInd in range(self.header['nSamples']):
+                sample = self.next_sample_from_file(fileObj, 
+                                                    self.header['sampSize'] // FLOAT_SIZE)
+                self.sampleMatrix.append(sample)
+        finally:
+            fileObj.close()

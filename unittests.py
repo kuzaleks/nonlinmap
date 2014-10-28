@@ -34,7 +34,8 @@ def centered_kernel_matrix(Kt, KSub):
 
 def read_config(fn=""):
     config = {}
-    config["sigma"] = 26.195884 # 19.63;
+    config["median"] = 6.548971
+    config["sigma"] = 2.0 * config["median"] # 19.63;
     config["dim"] = 13;
     config["transDim"] = 13;
     config["dt"] = np.dtype('<d')
@@ -48,7 +49,7 @@ def file_reader(dt, workdir):
         return np.reshape(train, (len(train) / ncol, ncol))
     return read_bin
 
-def test_tkernel():
+def tkernel(): #test
         
     workdir = os.path.join("tkernel_new", "tkernel_new", "rodrech")
     config = read_config()
@@ -95,7 +96,7 @@ class NLTransformer(object):
     
         
 
-def test_trans_data(): #test
+def trans_data(): #test
     workdir = os.path.join("tkernel_new", "tkernel_new", "rodrech")
     config = read_config()
     dim = config["dim"]
@@ -138,7 +139,7 @@ def test_trans_data(): #test
 
     assert np.allclose(transTest, transTestEstimed, atol=1e-5)
 
-def test_centering(): #test
+def centering(): #test
     workdir = os.path.join("tkernel_new", "tkernel_new", "rodrech")
     config = read_config()
 
@@ -182,6 +183,7 @@ def bulk_test(): #test
         pc = ParamCollector(os.path.join(workdir, refpath, fn))
         pc.store_sample_matrix()
         sMatr = np.array(pc.sampleMatrix)
+        assert np.allclose(gpuData, sMatr, atol=1e-1)
         try:
             assert np.allclose(gpuData, sMatr, atol=1e-1)
         except AssertionError:

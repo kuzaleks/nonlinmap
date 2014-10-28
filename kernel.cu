@@ -308,7 +308,8 @@ void transform(double *train, char *datafn, char codetrfn[], double* Kx, double 
 			printf("cudaMalloc dTransData returned error code %d, line(%d)\n", error, __LINE__);
 			exit(EXIT_FAILURE);
 		}
-    
+		if (verbose)
+			printf ("dtKernDim: %d x %d x %d\n", dataTotal, trTotal, sizeof(double));
 		error = cudaMalloc((void**) &dtKern, dataTotal * trTotal * sizeof(double));
 		if (error != cudaSuccess)
 		{
@@ -406,8 +407,10 @@ void transform(double *train, char *datafn, char codetrfn[], double* Kx, double 
 		base_name(line, fn);
 		strcat(path, fn);
 		printf("%s\n", path);
-		save_to_file(transData, dataTotal * transDim, path);
-		//write_htk_params(transData, nSamples, sampPeriod, sampSize, parmKind, path);
+		//save_to_file(transData, dataTotal * transDim, path);
+		parmKind = 9;
+		sampSize = transDim * sizeof(float);
+		write_htk_params(transData, nSamples, sampPeriod, sampSize, parmKind, path);
 
 		if (saveToFile) {
 			tKernCentr = (double *) malloc(dataTotal * trTotal * sizeof(double));
@@ -455,15 +458,16 @@ int main()
 {
 	char codetrfn[] = "rr_codetr.scp";
 	char baseDir[] = "gpu_data/";
-	double sigma = 26.195884; // 19.63;
+	double median = 6.548971;
+	double sigma = 2.0 * median; // 19.63;
     int dim = 13;
-    int transDim = dim;
+    int transDim = 7;
     
     bool verbose = false;
     bool saveToFile = false;
     
     int trTotal = 2991;// 1917;
-    int trTotalExt = 7479; // 3834;
+    int trTotalExt =  7479; // 3834;
    // int dataTotal = 10000;
     double * train; 
     double * eigvecs;
@@ -485,7 +489,7 @@ int main()
 	*/	
 	if (saveToFile) {
 		char trainPath[STR_MAX_LEN + 1];
-		strcpy(trainPath, baseDir);
+		strcpy(trainPath, "rodrech/");
 		strcat(trainPath, "train.bin");
 		save_to_file(train, trTotal * dim, trainPath);
 	}
