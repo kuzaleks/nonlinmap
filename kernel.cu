@@ -289,111 +289,149 @@ void transform(double *train, char *datafn, char codetrfn[], double* Kx, double 
 		if (saveToFile)	
 			save_to_file(data, dataTotal * dim, "rodrech/data.bin");
 
-		error = cudaMalloc((void**) &dData, dataTotal * dim * sizeof(double));
-		if (error != cudaSuccess)
-		{
-			printf("cudaMalloc dData returned error code %d, line(%d)\n", error, __LINE__);
-			exit(EXIT_FAILURE);
-		}
-		error = cudaMemcpy(dData, data, dataTotal * dim * sizeof(double), cudaMemcpyHostToDevice);
-		if (error != cudaSuccess)
-		{
-			printf("cudaMemcpy (data to dData) returned error code %d, line(%d)\n", error, __LINE__);
-			exit(EXIT_FAILURE);
-		}
-    
-		error = cudaMalloc((void**) &dTransData, dataTotal * transDim * sizeof(double));
-		if (error != cudaSuccess)
-		{
-			printf("cudaMalloc dTransData returned error code %d, line(%d)\n", error, __LINE__);
-			exit(EXIT_FAILURE);
-		}
-		if (verbose)
-			printf ("dtKernDim: %d x %d x %d\n", dataTotal, trTotal, sizeof(double));
-		error = cudaMalloc((void**) &dtKern, dataTotal * trTotal * sizeof(double));
-		if (error != cudaSuccess)
-		{
-			printf("cudaMalloc dtKern returned error code %d, line(%d)\n", error, __LINE__);
-			exit(EXIT_FAILURE);
-		}
-		error = cudaMalloc((void**) &dKtRowsSums, dataTotal * sizeof(double));
-		if (error != cudaSuccess)
-		{
-			printf("cudaMalloc dKtRowsSums returned error code %d, line(%d)\n", error, __LINE__);
-			exit(EXIT_FAILURE);
-		}
-		error = cudaMalloc((void**) &dtKernCentr, dataTotal * trTotal * sizeof(double));
-		if (error != cudaSuccess)
-		{
-			printf("cudaMalloc dtKernCentr returned error code %d, line(%d)\n", error, __LINE__);
-			exit(EXIT_FAILURE);
-		}
-    
-		//@@ Initialize the grid and block dimensions here
-		// int trainVSdataMax = MAX(trTotal, dataTotal);
-		dim3 DimGrid((trTotal - 1)/THREADS_IN_BLOCK + 1, (dataTotal - 1)/THREADS_IN_BLOCK + 1, 1);
-		dim3 DimBlock(THREADS_IN_BLOCK, THREADS_IN_BLOCK, 1);
+		transData = (double *) malloc(dataTotal * transDim * sizeof(double));
 
-		if (verbose)
-			printf("%s\n", "Performing CUDA computation");
-		//@@ Launch the GPU Kernel here
-		// Allocate CUDA events that we'll use for timing
-	
-		cudaEvent_t start;
-		error = cudaEventCreate(&start);
+		int chunkSize = 10000;
+		int dataSizeReminder = dataTotal;
+		int chunkInd = 0;
+		while (dataSizeReminder > 0) {
+			int dataChunkTotal = chunkSize < dataSizeReminder ? chunkSize : dataSizeReminder;  
 
-		cudaEvent_t stop;
-		error = cudaEventCreate(&stop);
-
-		// Record the start event
-		error = cudaEventRecord(start, NULL);
-    
-		make_tkern_device<<<DimGrid, DimBlock>>>(dTrain, dData, dtKern, sigma, trTotal, dataTotal, dim);
-		estim_row_sums<<<DimGrid, DimBlock>>>(dtKern, dKx, dKtRowsSums, dKRowsSums, trTotal, trTotalExt, dataTotal);
-		center<<<DimGrid, DimBlock>>>(dtKern, dKx, dtKernCentr, dKtRowsSums, dKRowsSums, trTotal, trTotalExt, dataTotal, sumsumKx);
-		matrixMultiply<<<DimGrid, DimBlock>>>(dtKernCentr, deigvecs, dTransData, dataTotal, trTotal,
-												trTotal, transDim, dataTotal, transDim);
-									
-		//cudaThreadSynchronize();
-		cudaDeviceSynchronize();
-		// Record the stop event
-		error = cudaEventRecord(stop, NULL);
-    
-		error = cudaEventSynchronize(stop);
-	
-		float currSecTotal = 0.0f;
-		error = cudaEventElapsedTime(&currSecTotal, start, stop);
-		printf("Performance: Time= %.3f msec\n", currSecTotal);
-		secTotal += currSecTotal;
-	
-		if (verbose)
-			printf("%s\n", "Copying output memory to the CPU");
-		//@@ Copy the GPU memory back to the CPU here
-    
-		if (saveToFile) {
-			int tKernRows = dataTotal;
-			int tKernCols = trTotal;
-			double * tKern = (double *) malloc(tKernRows * tKernCols * sizeof(double));
-			error = cudaMemcpy(tKern, dtKern, dataTotal * trTotal * sizeof(double), cudaMemcpyDeviceToHost);
+			error = cudaMalloc((void**) &dData, dataChunkTotal * dim * sizeof(double));
 			if (error != cudaSuccess)
 			{
-				printf("cudaMemcpy (dtKern to tKern) returned error code %d, line(%d)\n", error, __LINE__);
+				printf("cudaMalloc dData returned error code %d, line(%d)\n", error, __LINE__);
+				exit(EXIT_FAILURE);
+			}
+			error = cudaMemcpy(dData, data + chunkInd * chunkSize * dim, dataChunkTotal * dim * sizeof(double), cudaMemcpyHostToDevice);
+			if (error != cudaSuccess)
+			{
+				printf("cudaMemcpy (data to dData) returned error code %d, line(%d)\n", error, __LINE__);
+				exit(EXIT_FAILURE);
+			}
+    
+			error = cudaMalloc((void**) &dTransData, dataChunkTotal * transDim * sizeof(double));
+			if (error != cudaSuccess)
+			{
+				printf("cudaMalloc dTransData returned error code %d, line(%d)\n", error, __LINE__);
 				exit(EXIT_FAILURE);
 			}
 			if (verbose)
-				printf("%s\n", "Saving tKern to disc...");
-			save_to_file(tKern, dataTotal * trTotal, "rodrech/tkern.bin");
+				printf ("dtKernDim: %d x %d x %d\n", dataTotal, trTotal, sizeof(double));
+			error = cudaMalloc((void**) &dtKern, dataChunkTotal * trTotal * sizeof(double));
+			if (error != cudaSuccess)
+			{
+				printf("cudaMalloc dtKern returned error code %d, line(%d)\n", error, __LINE__);
+				exit(EXIT_FAILURE);
+			}
+			error = cudaMalloc((void**) &dKtRowsSums, dataChunkTotal * sizeof(double));
+			if (error != cudaSuccess)
+			{
+				printf("cudaMalloc dKtRowsSums returned error code %d, line(%d)\n", error, __LINE__);
+				exit(EXIT_FAILURE);
+			}
+			error = cudaMalloc((void**) &dtKernCentr, dataChunkTotal * trTotal * sizeof(double));
+			if (error != cudaSuccess)
+			{
+				printf("cudaMalloc dtKernCentr returned error code %d, line(%d)\n", error, __LINE__);
+				exit(EXIT_FAILURE);
+			}
+    
+			//@@ Initialize the grid and block dimensions here
+			// int trainVSdataMax = MAX(trTotal, dataTotal);
+			dim3 DimGrid((trTotal - 1)/THREADS_IN_BLOCK + 1, (dataChunkTotal - 1)/THREADS_IN_BLOCK + 1, 1);
+			dim3 DimBlock(THREADS_IN_BLOCK, THREADS_IN_BLOCK, 1);
+
 			if (verbose)
-				printf("%s\n", "tKern has been Saved!");
-			free(tKern);
+				printf("%s\n", "Performing CUDA computation");
+			//@@ Launch the GPU Kernel here
+			// Allocate CUDA events that we'll use for timing
+	
+			cudaEvent_t start;
+			error = cudaEventCreate(&start);
+
+			cudaEvent_t stop;
+			error = cudaEventCreate(&stop);
+
+			// Record the start event
+			error = cudaEventRecord(start, NULL);
+    
+			make_tkern_device<<<DimGrid, DimBlock>>>(dTrain, dData, dtKern, sigma, trTotal, dataChunkTotal, dim);
+			estim_row_sums<<<DimGrid, DimBlock>>>(dtKern, dKx, dKtRowsSums, dKRowsSums, trTotal, trTotalExt, dataChunkTotal);
+			center<<<DimGrid, DimBlock>>>(dtKern, dKx, dtKernCentr, dKtRowsSums, dKRowsSums, trTotal, trTotalExt, dataChunkTotal, sumsumKx);
+			matrixMultiply<<<DimGrid, DimBlock>>>(dtKernCentr, deigvecs, dTransData, dataChunkTotal, trTotal,
+													trTotal, transDim, dataChunkTotal, transDim);
+									
+			//cudaThreadSynchronize();
+			cudaDeviceSynchronize();
+			// Record the stop event
+			error = cudaEventRecord(stop, NULL);
+    
+			error = cudaEventSynchronize(stop);
+	
+			float currSecTotal = 0.0f;
+			error = cudaEventElapsedTime(&currSecTotal, start, stop);
+			printf("Performance: Time= %.3f msec\n", currSecTotal);
+			secTotal += currSecTotal;
+	
+			if (verbose)
+				printf("%s\n", "Copying output memory to the CPU");
+			//@@ Copy the GPU memory back to the CPU here
+    
+			if (saveToFile) {
+				int tKernRows = dataChunkTotal;
+				int tKernCols = trTotal;
+				double * tKern = (double *) malloc(tKernRows * tKernCols * sizeof(double));
+				error = cudaMemcpy(tKern, dtKern, dataChunkTotal * trTotal * sizeof(double), cudaMemcpyDeviceToHost);
+				if (error != cudaSuccess)
+				{
+					printf("cudaMemcpy (dtKern to tKern) returned error code %d, line(%d)\n", error, __LINE__);
+					exit(EXIT_FAILURE);
+				}
+				if (verbose)
+					printf("%s\n", "Saving tKern to disc...");
+				save_to_file(tKern, dataChunkTotal * trTotal, "rodrech/tkern.bin");
+				if (verbose)
+					printf("%s\n", "tKern has been Saved!");
+				free(tKern);
+			}
+///			transData = (double *) malloc(dataTotal * transDim * sizeof(double));
+			error = cudaMemcpy(transData + chunkInd * chunkSize * transDim, dTransData, dataChunkTotal * transDim * sizeof(double), cudaMemcpyDeviceToHost);
+			if (error != cudaSuccess)
+			{
+				printf("cudaMemcpy (dTransData to transData) returned error code %d, line(%d)\n", error, __LINE__);
+				exit(EXIT_FAILURE);
+			}
+
+			if (saveToFile) {
+				tKernCentr = (double *) malloc(dataChunkTotal * trTotal * sizeof(double));
+				error = cudaMemcpy(tKernCentr, dtKernCentr, dataChunkTotal * trTotal * sizeof(double), cudaMemcpyDeviceToHost);
+				if (error != cudaSuccess)
+				{
+					printf("cudaMemcpy (dtKernCentr to tKernCentr) returned error code %d, line(%d)\n", error, __LINE__);
+					exit(EXIT_FAILURE);
+				}
+				if (verbose)
+					printf("%s\n", "Saving tKernCentr to disc...");
+				save_to_file(tKernCentr, dataChunkTotal * trTotal, "rodrech/t_kern_centr.bin");
+				if (verbose)
+					printf("%s\n", "tKernCentr has been Saved!");
+				free(tKernCentr);
+			}
+			if (verbose)
+				printf("%s\n", "Freeing GPU Memory");
+	
+			//@@ Free the GPU memory here
+			cudaFree(dData);
+			cudaFree(dTransData);
+			cudaFree(dtKern);
+			cudaFree(dtKernCentr);
+			cudaFree(dKtRowsSums);
+
+			dataSizeReminder -= chunkSize;
+			chunkInd += 1;
 		}
-		transData = (double *) malloc(dataTotal * transDim * sizeof(double));
-		error = cudaMemcpy(transData, dTransData, dataTotal * transDim * sizeof(double), cudaMemcpyDeviceToHost);
-		if (error != cudaSuccess)
-		{
-			printf("cudaMemcpy (dTransData to transData) returned error code %d, line(%d)\n", error, __LINE__);
-			exit(EXIT_FAILURE);
-		}
+		
 		if (saveToFile) {
 			if (verbose)
 				printf("%s\n", "Saving transData for test to disc...");
@@ -411,31 +449,6 @@ void transform(double *train, char *datafn, char codetrfn[], double* Kx, double 
 		parmKind = 9;
 		sampSize = transDim * sizeof(float);
 		write_htk_params(transData, nSamples, sampPeriod, sampSize, parmKind, path);
-
-		if (saveToFile) {
-			tKernCentr = (double *) malloc(dataTotal * trTotal * sizeof(double));
-			error = cudaMemcpy(tKernCentr, dtKernCentr, dataTotal * trTotal * sizeof(double), cudaMemcpyDeviceToHost);
-			if (error != cudaSuccess)
-			{
-				printf("cudaMemcpy (dtKernCentr to tKernCentr) returned error code %d, line(%d)\n", error, __LINE__);
-				exit(EXIT_FAILURE);
-			}
-			if (verbose)
-				printf("%s\n", "Saving tKernCentr to disc...");
-			save_to_file(tKernCentr, dataTotal * trTotal, "rodrech/t_kern_centr.bin");
-			if (verbose)
-				printf("%s\n", "tKernCentr has been Saved!");
-			free(tKernCentr);
-		}
-		if (verbose)
-			printf("%s\n", "Freeing GPU Memory");
-	
-		//@@ Free the GPU memory here
-		cudaFree(dData);
-		cudaFree(dTransData);
-		cudaFree(dtKern);
-		cudaFree(dtKernCentr);
-		cudaFree(dKtRowsSums);
 
 		free(data);
 		free(transData);
@@ -456,7 +469,7 @@ void transform(double *train, char *datafn, char codetrfn[], double* Kx, double 
 
 int main()
 {
-	char codetrfn[] = "rr_codetr.scp";
+	char codetrfn[] = "rr_codefew.scp";
 	char baseDir[] = "gpu_data/";
 	double median = 6.548971;
 	double sigma = 2.0 * median; // 19.63;
